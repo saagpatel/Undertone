@@ -187,6 +187,45 @@ body {
 	}
 }
 
+/* Secondary actions on a captured score: play it back, export it. */
+.score-actions {
+	display: flex;
+	gap: 12px;
+}
+
+.ghost-button {
+	appearance: none;
+	min-height: 40px;
+	padding: 0 18px;
+	border: 1px solid var(--ink-soft);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-size: 1rem;
+	cursor: pointer;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		border-color 160ms ease,
+		transform 160ms ease;
+}
+
+.ghost-button:hover {
+	background: var(--ink);
+	color: var(--paper);
+	border-color: var(--ink);
+}
+
+.ghost-button:active {
+	transform: translateY(1px);
+}
+
+.ghost-button:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+
 .app__hint {
 	margin: 0;
 	font-family: var(--font-mono);

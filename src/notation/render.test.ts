@@ -16,10 +16,10 @@ describe("phraseToSVG (fixture: C4 q, E4 q, G4 h)", () => {
 		expect(specs.filter((s) => hasClass(s, "staff-line"))).toHaveLength(5);
 	});
 
-	it("draws one treble clef as text", () => {
+	it("draws one treble clef as a single drawn path", () => {
 		const clef = specs.filter((s) => hasClass(s, "clef"));
 		expect(clef).toHaveLength(1);
-		expect(clef[0].kind).toBe("text");
+		expect(clef[0].kind).toBe("path");
 	});
 
 	it("draws 3 noteheads at the correct staff-y positions", () => {

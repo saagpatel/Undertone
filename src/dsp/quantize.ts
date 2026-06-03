@@ -80,6 +80,30 @@ export function frequencyToPitch(frequency: number): {
 	return { pitch: spelling.pitch, accidental: spelling.accidental, octave };
 }
 
+/** Semitone offset above C for each natural pitch class. */
+const NATURAL_SEMITONES: Record<NoteName, number> = {
+	C: 0,
+	D: 2,
+	E: 4,
+	F: 5,
+	G: 7,
+	A: 9,
+	B: 11,
+};
+
+/**
+ * Chromatic pitch -> frequency (Hz): the inverse of {@link frequencyToPitch}.
+ * Equal temperament, A4 = 440 Hz. Drives oscillator playback in Phase 3.
+ */
+export function noteFrequency(
+	note: Pick<NoteEvent, "pitch" | "accidental" | "octave">,
+): number {
+	const offset =
+		note.accidental === "sharp" ? 1 : note.accidental === "flat" ? -1 : 0;
+	const midi = (note.octave + 1) * 12 + NATURAL_SEMITONES[note.pitch] + offset;
+	return 440 * 2 ** ((midi - 69) / 12);
+}
+
 /** Nearest note value to a raw duration, compared in log space (musical ratio). */
 export function durationToNoteValue(
 	durationMs: number,

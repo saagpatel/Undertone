@@ -1,11 +1,43 @@
+import { useEffect } from "react";
 import { CaptureButton } from "./components/CaptureButton";
-import { NotationCanvas } from "./components/NotationCanvas";
+import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
 import { useCapture } from "./hooks/useCapture";
+import { usePlayback } from "./hooks/usePlayback";
+import { serializePhraseSVG } from "./notation/serialize";
+
+/** localStorage key for the most recent captured phrase (local-only, optional). */
+const STORAGE_KEY = "undertone.lastPhrase";
 
 export default function App() {
 	const { pitch, phrase, isCapturing, error, start, stop } = useCapture();
+	const playback = usePlayback(phrase);
 	const status = isCapturing ? "recording" : phrase ? "done" : "idle";
+	const hasNotes = !!phrase && phrase.notes.length > 0;
+
+	// Persist the last phrase locally — best-effort, never blocks the UI and
+	// never leaves the tab. localStorage can throw (private mode, quota): log it.
+	useEffect(() => {
+		if (!phrase) return;
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(phrase));
+		} catch (err) {
+			console.warn("Undertone: could not save the last phrase locally.", err);
+		}
+	}, [phrase]);
+
+	const handleExport = () => {
+		if (!hasNotes || !phrase) return;
+		const svg = serializePhraseSVG(phrase, NOTATION_GEOM);
+		const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = "undertone.svg";
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
+	};
 
 	return (
 		<main className="app">
@@ -18,7 +50,7 @@ export default function App() {
 				{isCapturing ? (
 					<PitchMeter pitch={pitch} />
 				) : phrase ? (
-					phrase.notes.length > 0 ? (
+					hasNotes ? (
 						<NotationCanvas phrase={phrase} />
 					) : (
 						<p className="app__empty">
@@ -32,12 +64,32 @@ export default function App() {
 
 			<div className="app__controls">
 				<CaptureButton status={status} onStart={start} onStop={stop} />
+
+				{hasNotes && (
+					<div className="score-actions">
+						<button
+							type="button"
+							className="ghost-button"
+							onClick={playback.isPlaying ? playback.stop : playback.play}
+						>
+							{playback.isPlaying ? "Stop" : "Play"}
+						</button>
+						<button
+							type="button"
+							className="ghost-button"
+							onClick={handleExport}
+						>
+							Export SVG
+						</button>
+					</div>
+				)}
+
 				{error ? (
 					<p className="app__error" role="alert">
 						{error}
 					</p>
 				) : (
-					<p className="app__hint">Phase 2 · hum → sheet music</p>
+					<p className="app__hint">hum → reveal → play → export</p>
 				)}
 			</div>
 		</main>

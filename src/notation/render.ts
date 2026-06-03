@@ -1,10 +1,8 @@
 import type { Phrase } from "../dsp/quantize";
 import { accidentalFor } from "./accidentals";
+import { trebleClef } from "./clef";
 import { beamGroups, isBeamable, notePosition } from "./layout";
 import type { StaffGeometry, SVGElementSpec } from "./types";
-
-/** Treble clef glyph (U+1D11E); Phase 3 swaps this for a drawn path. */
-const TREBLE_CLEF = "\u{1D11E}";
 
 const CLEF_GAP_FACTOR = 4; // staff spaces reserved for the clef before note 1
 const PIXELS_PER_BEAT_FACTOR = 3.2; // horizontal spread per quarter-note beat
@@ -39,34 +37,28 @@ export function phraseToSVG(
 		leftMargin + beatPosition * pxPerBeat;
 	const stemUpAt = (cy: number): boolean => cy > middleLineY; // below middle line → stem up
 
-	// 1. Staff lines.
+	// 1. Staff lines (revealed with the clef as one "frame" that fades in).
 	for (let i = 0; i < geom.numLines; i++) {
 		const y = round(geom.y + i * ls);
 		specs.push({
 			kind: "line",
 			attrs: { x1: geom.x, y1: y, x2: geom.x + geom.width, y2: y },
 			className: "staff-line",
+			reveal: "frame",
 		});
 	}
 
-	// 2. Treble clef.
-	specs.push({
-		kind: "text",
-		attrs: {
-			x: round(geom.x + ls * 0.4),
-			y: round(bottomLineY + ls * 0.2),
-			fontSize: round(ls * 4.2),
-		},
-		text: TREBLE_CLEF,
-		className: "clef",
-	});
+	// 2. Treble clef (a drawn path, not a font glyph).
+	specs.push({ ...trebleClef(geom), reveal: "frame" });
 
-	// 3. Per-note: ledger lines, accidental, notehead, stem.
-	for (const note of phrase.notes) {
+	// 3. Per-note: ledger lines, accidental, notehead, stem. Each note's glyphs
+	//    share its index so the reveal animation staggers them in playing order.
+	phrase.notes.forEach((note, index) => {
 		const cx = noteX(note.beatPosition);
 		const cy = notePosition(note, geom);
+		const noteSpecs: SVGElementSpec[] = [];
 
-		specs.push(...ledgerLines(cx, cy, rx, ls, topLineY, bottomLineY));
+		noteSpecs.push(...ledgerLines(cx, cy, rx, ls, topLineY, bottomLineY));
 
 		const accidental = accidentalFor(
 			note.accidental,
@@ -74,10 +66,13 @@ export function phraseToSVG(
 			cy,
 			ls,
 		);
-		if (accidental) specs.push(accidental);
+		if (accidental) {
+			accidental.attrs.pathLength = 1;
+			noteSpecs.push(accidental);
+		}
 
 		const open = isOpenHead(note);
-		specs.push({
+		noteSpecs.push({
 			kind: "ellipse",
 			attrs: {
 				cx: round(cx),
@@ -97,15 +92,19 @@ export function phraseToSVG(
 			const tipY = round(
 				up ? cy - ls * STEM_LENGTH_FACTOR : cy + ls * STEM_LENGTH_FACTOR,
 			);
-			specs.push({
+			noteSpecs.push({
 				kind: "line",
-				attrs: { x1: sx, y1: round(cy), x2: sx, y2: tipY },
+				attrs: { x1: sx, y1: round(cy), x2: sx, y2: tipY, pathLength: 1 },
 				className: "stem",
 			});
 		}
-	}
 
-	// 4. Beams: one straight beam across each beamable run of 2+ notes.
+		for (const spec of noteSpecs) spec.reveal = index;
+		specs.push(...noteSpecs);
+	});
+
+	// 4. Beams: one straight beam across each beamable run of 2+ notes. The beam
+	//    reveals with its last note so it draws after the heads it connects.
 	for (const group of beamGroups(phrase.notes)) {
 		if (group.length < 2 || !isBeamable(group[0].noteValue)) continue;
 		const tips = group.map((note) => {
@@ -121,10 +120,21 @@ export function phraseToSVG(
 		});
 		const first = tips[0];
 		const last = tips[tips.length - 1];
+		const lastIndex = group.reduce(
+			(max, note) => Math.max(max, phrase.notes.indexOf(note)),
+			0,
+		);
 		specs.push({
 			kind: "line",
-			attrs: { x1: first.x, y1: first.y, x2: last.x, y2: last.y },
+			attrs: {
+				x1: first.x,
+				y1: first.y,
+				x2: last.x,
+				y2: last.y,
+				pathLength: 1,
+			},
 			className: "beam",
+			reveal: lastIndex,
 		});
 	}
 
@@ -165,6 +175,7 @@ function ledger(cx: number, y: number, half: number): SVGElementSpec {
 			y1: round(y),
 			x2: round(cx + half),
 			y2: round(y),
+			pathLength: 1,
 		},
 		className: "ledger-line",
 	};

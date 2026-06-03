@@ -45,7 +45,72 @@
 	stroke-width: 1.8;
 }
 
+/* The clef is a drawn path (Phase 3), so it strokes like the rest of the ink. */
 .notation .clef {
-	fill: var(--ink);
-	font-family: var(--font-display);
+	stroke: var(--ink);
+	stroke-width: 1.6;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+}
+
+/* --- Phase 3 reveal: the notation inks itself in over ~1s ---
+   The staff + clef fade in as a unit; each note's strokes then draw on, and its
+   notehead blooms, staggered via an inline animation-delay set per element in
+   <NotationCanvas>. `both` fill-mode holds each glyph hidden until its turn. */
+.notation__ink--animate .staff-line,
+.notation__ink--animate .clef {
+	animation: ut-fade 420ms ease-out both;
+}
+
+.notation__ink--animate .notehead {
+	opacity: 0;
+	animation: ut-bloom 320ms ease-out both;
+}
+
+.notation__ink--animate .stem,
+.notation__ink--animate .beam,
+.notation__ink--animate .ledger-line,
+.notation__ink--animate .accidental {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: ut-draw 360ms ease-out both;
+}
+
+@keyframes ut-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes ut-bloom {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes ut-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.notation__ink--animate .staff-line,
+	.notation__ink--animate .clef,
+	.notation__ink--animate .notehead,
+	.notation__ink--animate .stem,
+	.notation__ink--animate .beam,
+	.notation__ink--animate .ledger-line,
+	.notation__ink--animate .accidental {
+		animation: none;
+		opacity: 1;
+		stroke-dashoffset: 0;
+	}
 }
