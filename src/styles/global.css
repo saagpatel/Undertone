@@ -1,0 +1,171 @@
+:root {
+	/* Paper-and-ink palette (the notation aesthetic deepens in Phase 2). */
+	--paper: #f8f4ec;
+	--paper-shade: #efe7d6;
+	--ink: #1a1208;
+	--ink-soft: #6b5d49;
+	--accent: #b54a2b;
+
+	color-scheme: light;
+	/* Local serif only — Undertone makes zero network requests, so no web fonts. */
+	--font-display:
+		"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+	font-family: var(--font-display);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+}
+
+.app {
+	min-height: 100%;
+	max-width: 40rem;
+	margin: 0 auto;
+	padding: 96px 24px 64px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: space-between;
+	gap: 64px;
+	text-align: center;
+}
+
+.app__header {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.app__title {
+	margin: 0;
+	font-size: clamp(3rem, 12vw, 6rem);
+	font-weight: 300;
+	letter-spacing: -0.02em;
+	line-height: 1;
+}
+
+.app__tagline {
+	margin: 0;
+	max-width: 28ch;
+	font-size: 1.25rem;
+	color: var(--ink-soft);
+}
+
+.app__stage {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* --- Pitch meter --- */
+.pitch-meter {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	min-width: 16rem;
+}
+
+.pitch-meter__note {
+	font-size: clamp(5rem, 22vw, 9rem);
+	font-weight: 700;
+	line-height: 0.9;
+}
+
+.pitch-meter__hz {
+	font-family: var(--font-mono);
+	font-size: 1.25rem;
+	letter-spacing: 0.04em;
+	color: var(--ink-soft);
+}
+
+.pitch-meter__confidence {
+	width: 12rem;
+	height: 4px;
+	border-radius: 999px;
+	background: var(--paper-shade);
+	overflow: hidden;
+}
+
+.pitch-meter__confidence-fill {
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	transition: width 120ms ease-out;
+}
+
+/* --- Controls --- */
+.app__controls {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 16px;
+}
+
+.mic-button {
+	appearance: none;
+	min-height: 48px;
+	padding: 0 28px;
+	border: 1.5px solid var(--ink);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-size: 1.125rem;
+	cursor: pointer;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 160ms ease;
+}
+
+.mic-button:hover {
+	background: var(--ink);
+	color: var(--paper);
+}
+
+.mic-button:active {
+	transform: translateY(1px);
+}
+
+.mic-button:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+
+.mic-button[data-listening="true"] {
+	border-color: var(--accent);
+	background: var(--accent);
+	color: var(--paper);
+}
+
+.app__hint {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	color: var(--ink-soft);
+}
+
+.app__error {
+	margin: 0;
+	max-width: 32ch;
+	font-size: 0.95rem;
+	color: var(--accent);
+}

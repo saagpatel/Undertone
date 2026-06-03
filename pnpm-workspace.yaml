@@ -1,0 +1,7 @@
+# pnpm 11 build-script allow-list (this file, not package.json's "pnpm" field).
+# esbuild ships its prebuilt binary in a platform optional dep
+# (@esbuild/darwin-arm64), so its postinstall is effectively a no-op we
+# explicitly trust. Approving it clears pnpm's ignored-build flag that otherwise
+# fails the pre-run dep check behind `pnpm test` / `pnpm build`.
+allowBuilds:
+  esbuild: true

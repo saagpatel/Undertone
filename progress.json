@@ -1,0 +1,125 @@
+{
+	"project": "Undertone",
+	"updatedAt": "2026-06-02",
+	"currentPhase": 0,
+	"phases": [
+		{
+			"id": 0,
+			"name": "Scaffold + Web Audio + Real-Time Pitch Detection",
+			"status": "done",
+			"tasks": [
+				{
+					"id": "0.1",
+					"desc": "Vite + React 18 + TS (strict) + Vitest scaffold; pnpm dev/test/build all green",
+					"status": "done"
+				},
+				{
+					"id": "0.2",
+					"desc": "useAudioCapture: getUserMedia -> AudioContext -> AnalyserNode (fftSize 2048, smoothingTimeConstant 0), user-gesture gated",
+					"status": "done"
+				},
+				{
+					"id": "0.3",
+					"desc": "detectPitch(buffer, sampleRate) in src/dsp/pitch.ts: autocorrelation + parabolic interpolation, RMS + confidence gating, C3-C6 lag clamp",
+					"status": "done"
+				},
+				{
+					"id": "0.4",
+					"desc": "60 fps requestAnimationFrame loop (useCapture) feeding a live <PitchMeter>",
+					"status": "done"
+				},
+				{
+					"id": "0.5",
+					"desc": "progress.json + tests.json written at project root",
+					"status": "done"
+				}
+			]
+		},
+		{
+			"id": 1,
+			"name": "Pitch Sequence Capture + Quantization",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "1.1",
+					"desc": "CaptureSession: onset/offset gating -> RawPhrase",
+					"status": "pending"
+				},
+				{
+					"id": "1.2",
+					"desc": "quantizePhrase: freq -> chromatic note + value + beat position",
+					"status": "pending"
+				},
+				{
+					"id": "1.3",
+					"desc": "Wire CaptureSession into useCapture (start/stop/phrase)",
+					"status": "pending"
+				},
+				{
+					"id": "1.4",
+					"desc": "<CaptureButton> idle/recording/done lifecycle",
+					"status": "pending"
+				}
+			]
+		},
+		{
+			"id": 2,
+			"name": "Procedural SVG Notation Renderer",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "2.1",
+					"desc": "layout.ts: notePosition + beamGroups",
+					"status": "pending"
+				},
+				{
+					"id": "2.2",
+					"desc": "accidentals.ts: sharp/flat glyph specs",
+					"status": "pending"
+				},
+				{
+					"id": "2.3",
+					"desc": "render.ts: phraseToSVG (staff, clef, noteheads, stems, beams)",
+					"status": "pending"
+				},
+				{
+					"id": "2.4",
+					"desc": "<NotationCanvas> renders SVGElementSpec[] with hand-scored CSS",
+					"status": "pending"
+				},
+				{
+					"id": "2.5",
+					"desc": "End-to-end: hum -> quantize -> render",
+					"status": "pending"
+				}
+			]
+		},
+		{
+			"id": 3,
+			"name": "Polish - Reveal Animation, Playback, Export",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "3.1",
+					"desc": "<RevealOverlay> ink-draw animation",
+					"status": "pending"
+				},
+				{
+					"id": "3.2",
+					"desc": "usePlayback: Web Audio oscillator playback",
+					"status": "pending"
+				},
+				{
+					"id": "3.3",
+					"desc": "SVG export + optional localStorage save",
+					"status": "pending"
+				},
+				{
+					"id": "3.4",
+					"desc": "Aesthetic tuning (paper + ink, stroke irregularity)",
+					"status": "pending"
+				}
+			]
+		}
+	]
+}

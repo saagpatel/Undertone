@@ -1,0 +1,145 @@
+{
+	"project": "Undertone",
+	"updatedAt": "2026-06-02",
+	"framework": "vitest",
+	"suites": [
+		{
+			"phase": 0,
+			"file": "src/dsp/pitch.test.ts",
+			"status": "passing",
+			"cases": [
+				{
+					"name": "detects 440 Hz (A4) sine within +/-5 Hz with confidence >= 0.9",
+					"status": "passing"
+				},
+				{
+					"name": "reports silence as frequency 0 with rms below the floor",
+					"status": "passing"
+				},
+				{
+					"name": "detects C4 (~261.6 Hz) within +/-5 Hz",
+					"status": "passing"
+				},
+				{
+					"name": "detects A5 (880 Hz) without dropping an octave",
+					"status": "passing"
+				},
+				{
+					"name": "detects a quiet but audible tone (amplitude 0.2)",
+					"status": "passing"
+				}
+			]
+		},
+		{
+			"phase": 1,
+			"file": "src/dsp/capture.test.ts",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "A4/400ms + silence/200ms + C5/600ms -> 2 RawNotes",
+					"status": "planned"
+				},
+				{
+					"name": "silence-only stream -> empty RawPhrase",
+					"status": "planned"
+				},
+				{
+					"name": "onset requires >=3 consecutive confident frames",
+					"status": "planned"
+				},
+				{
+					"name": "offset requires >=5 frames below threshold or >50 cents shift",
+					"status": "planned"
+				}
+			]
+		},
+		{
+			"phase": 1,
+			"file": "src/dsp/quantize.test.ts",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "440 Hz -> { pitch: A, accidental: null, octave: 4 }",
+					"status": "planned"
+				},
+				{
+					"name": "frequency -> nearest chromatic note via MIDI mapping",
+					"status": "planned"
+				},
+				{
+					"name": "onset -> beat position snapped to 16th grid at 90 BPM",
+					"status": "planned"
+				},
+				{ "name": "duration -> NoteValue bucket", "status": "planned" }
+			]
+		},
+		{
+			"phase": 2,
+			"file": "src/notation/layout.test.ts",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "C3-C6 chromatic notes -> correct staff-y values",
+					"status": "planned"
+				},
+				{
+					"name": "C4 (middle C) -> one ledger line below the staff",
+					"status": "planned"
+				},
+				{
+					"name": "beamGroups groups consecutive eighth/sixteenth notes",
+					"status": "planned"
+				}
+			]
+		},
+		{
+			"phase": 2,
+			"file": "src/notation/accidentals.test.ts",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "F# -> sharp SVGElementSpec with correct attrs",
+					"status": "planned"
+				}
+			]
+		},
+		{
+			"phase": 2,
+			"file": "src/notation/render.test.ts",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "fixture-phrase -> exactly 5 staff lines",
+					"status": "planned"
+				},
+				{
+					"name": "fixture-phrase -> 3 noteheads at correct y-coords",
+					"status": "planned"
+				},
+				{
+					"name": "stems on quarter notes, no beam on the half note",
+					"status": "planned"
+				}
+			]
+		},
+		{
+			"phase": 3,
+			"file": "src/notation/render.test.ts (export) + manual",
+			"status": "planned",
+			"cases": [
+				{
+					"name": "serialized SVG export is well-formed and reopens",
+					"status": "planned"
+				},
+				{
+					"name": "playback schedules oscillators from a single time base (no drift)",
+					"status": "planned"
+				},
+				{
+					"name": "reveal animation re-triggers on new capture (manual)",
+					"status": "planned"
+				}
+			]
+		}
+	]
+}
