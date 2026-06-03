@@ -1,7 +1,7 @@
 {
 	"project": "Undertone",
 	"updatedAt": "2026-06-02",
-	"currentPhase": 0,
+	"currentPhase": 1,
 	"phases": [
 		{
 			"id": 0,
@@ -38,27 +38,27 @@
 		{
 			"id": 1,
 			"name": "Pitch Sequence Capture + Quantization",
-			"status": "pending",
+			"status": "done",
 			"tasks": [
 				{
 					"id": "1.1",
-					"desc": "CaptureSession: onset/offset gating -> RawPhrase",
-					"status": "pending"
+					"desc": "capture.ts: reduceFramesToPhrase + CaptureSession onset/offset gating -> RawPhrase",
+					"status": "done"
 				},
 				{
 					"id": "1.2",
-					"desc": "quantizePhrase: freq -> chromatic note + value + beat position",
-					"status": "pending"
+					"desc": "quantizePhrase: freq -> chromatic note + value + beat position (grid snap + sequential fallback)",
+					"status": "done"
 				},
 				{
 					"id": "1.3",
-					"desc": "Wire CaptureSession into useCapture (start/stop/phrase)",
-					"status": "pending"
+					"desc": "useCapture orchestrator: { pitch, phrase, isCapturing, error, start, stop }",
+					"status": "done"
 				},
 				{
 					"id": "1.4",
-					"desc": "<CaptureButton> idle/recording/done lifecycle",
-					"status": "pending"
+					"desc": "<CaptureButton> idle/recording/done + <PhrasePreview> text view",
+					"status": "done"
 				}
 			]
 		},

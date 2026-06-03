@@ -1,40 +1,35 @@
+import { CaptureButton } from "./components/CaptureButton";
+import { PhrasePreview } from "./components/PhrasePreview";
 import { PitchMeter } from "./components/PitchMeter";
-import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useCapture } from "./hooks/useCapture";
 
 export default function App() {
-	const audio = useAudioCapture();
-	const pitch = useCapture(audio.analyser, audio.sampleRate);
-	const listening = audio.state === "running";
+	const { pitch, phrase, isCapturing, error, start, stop } = useCapture();
+	const status = isCapturing ? "recording" : phrase ? "done" : "idle";
 
 	return (
 		<main className="app">
 			<header className="app__header">
 				<h1 className="app__title">Undertone</h1>
-				<p className="app__tagline">
-					Hum a melody — watch its pitch reveal itself.
-				</p>
+				<p className="app__tagline">Hum a melody — watch it reveal itself.</p>
 			</header>
 
 			<section className="app__stage">
-				<PitchMeter pitch={listening ? pitch : null} />
+				{isCapturing || !phrase ? (
+					<PitchMeter pitch={isCapturing ? pitch : null} />
+				) : (
+					<PhrasePreview phrase={phrase} />
+				)}
 			</section>
 
 			<div className="app__controls">
-				<button
-					type="button"
-					className="mic-button"
-					data-listening={listening}
-					onClick={listening ? audio.stop : audio.start}
-				>
-					{listening ? "Stop listening" : "Start listening"}
-				</button>
-				{audio.error ? (
+				<CaptureButton status={status} onStart={start} onStop={stop} />
+				{error ? (
 					<p className="app__error" role="alert">
-						{audio.error}
+						{error}
 					</p>
 				) : (
-					<p className="app__hint">Phase 0 · live pitch detection</p>
+					<p className="app__hint">Phase 1 · capture + quantize</p>
 				)}
 			</div>
 		</main>

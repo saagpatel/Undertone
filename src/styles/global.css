@@ -150,10 +150,41 @@ body {
 	outline-offset: 3px;
 }
 
-.mic-button[data-listening="true"] {
+.mic-button[data-status="recording"] {
 	border-color: var(--accent);
 	background: var(--accent);
 	color: var(--paper);
+}
+
+.mic-button[data-status="done"] {
+	border-style: dashed;
+}
+
+.mic-button__dot {
+	display: inline-block;
+	width: 9px;
+	height: 9px;
+	margin-right: 9px;
+	border-radius: 50%;
+	background: currentColor;
+	vertical-align: middle;
+	animation: undertone-pulse 1s ease-in-out infinite;
+}
+
+@keyframes undertone-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.25;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.mic-button__dot {
+		animation: none;
+	}
 }
 
 .app__hint {
@@ -168,4 +199,42 @@ body {
 	max-width: 32ch;
 	font-size: 0.95rem;
 	color: var(--accent);
+}
+
+/* --- Phrase preview (Phase 1; replaced by NotationCanvas in Phase 2) --- */
+.phrase-preview {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+	justify-content: center;
+	align-items: flex-end;
+	margin: 0;
+	padding: 0;
+	max-width: 32rem;
+	list-style: none;
+}
+
+.phrase-preview__note {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+
+.phrase-preview__pitch {
+	font-size: 2.5rem;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.phrase-preview__value {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--ink-soft);
+}
+
+.phrase-preview--empty {
+	margin: 0;
+	font-size: 1.1rem;
+	color: var(--ink-soft);
 }

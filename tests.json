@@ -33,44 +33,63 @@
 		{
 			"phase": 1,
 			"file": "src/dsp/capture.test.ts",
-			"status": "planned",
+			"status": "passing",
 			"cases": [
 				{
-					"name": "A4/400ms + silence/200ms + C5/600ms -> 2 RawNotes",
-					"status": "planned"
+					"name": "splits a hum / silence / hum sequence into two notes",
+					"status": "passing"
 				},
 				{
-					"name": "silence-only stream -> empty RawPhrase",
-					"status": "planned"
+					"name": "returns an empty phrase for silence only",
+					"status": "passing"
 				},
 				{
-					"name": "onset requires >=3 consecutive confident frames",
-					"status": "planned"
+					"name": "ignores a blip shorter than the onset window",
+					"status": "passing"
 				},
 				{
-					"name": "offset requires >=5 frames below threshold or >50 cents shift",
-					"status": "planned"
+					"name": "splits a legato pitch jump with no intervening silence",
+					"status": "passing"
+				},
+				{
+					"name": "CaptureSession buffers and folds to the same phrase on finish",
+					"status": "passing"
+				},
+				{
+					"name": "CaptureSession auto-terminates past the session timeout",
+					"status": "passing"
 				}
 			]
 		},
 		{
 			"phase": 1,
 			"file": "src/dsp/quantize.test.ts",
-			"status": "planned",
+			"status": "passing",
 			"cases": [
 				{
-					"name": "440 Hz -> { pitch: A, accidental: null, octave: 4 }",
-					"status": "planned"
+					"name": "frequencyToPitch maps A4/C5/middle-C/F#4 correctly",
+					"status": "passing"
 				},
 				{
-					"name": "frequency -> nearest chromatic note via MIDI mapping",
-					"status": "planned"
+					"name": "durationToNoteValue buckets 160/333/400/667/1333/2667 ms at 90 BPM",
+					"status": "passing"
 				},
 				{
-					"name": "onset -> beat position snapped to 16th grid at 90 BPM",
-					"status": "planned"
+					"name": "quantizes a single A4 quarter note at beat 0",
+					"status": "passing"
 				},
-				{ "name": "duration -> NoteValue bucket", "status": "planned" }
+				{
+					"name": "returns an empty phrase for an empty RawPhrase",
+					"status": "passing"
+				},
+				{
+					"name": "snaps on-grid onsets to 16th-note beat positions",
+					"status": "passing"
+				},
+				{
+					"name": "falls back to sequential placement when most onsets miss the grid",
+					"status": "passing"
+				}
 			]
 		},
 		{
