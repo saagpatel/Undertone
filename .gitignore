@@ -10,6 +10,9 @@ dist-ssr/
 coverage/
 .vitest/
 
+# Playwright MCP scratch (screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # Editor / OS
 .DS_Store
 .idea/

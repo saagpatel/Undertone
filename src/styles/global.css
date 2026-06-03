@@ -201,40 +201,9 @@ body {
 	color: var(--accent);
 }
 
-/* --- Phrase preview (Phase 1; replaced by NotationCanvas in Phase 2) --- */
-.phrase-preview {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 20px;
-	justify-content: center;
-	align-items: flex-end;
+.app__empty {
 	margin: 0;
-	padding: 0;
-	max-width: 32rem;
-	list-style: none;
-}
-
-.phrase-preview__note {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
-}
-
-.phrase-preview__pitch {
-	font-size: 2.5rem;
-	font-weight: 700;
-	line-height: 1;
-}
-
-.phrase-preview__value {
-	font-family: var(--font-mono);
-	font-size: 0.75rem;
-	color: var(--ink-soft);
-}
-
-.phrase-preview--empty {
-	margin: 0;
+	max-width: 28ch;
 	font-size: 1.1rem;
 	color: var(--ink-soft);
 }

@@ -1,7 +1,7 @@
 {
 	"project": "Undertone",
 	"updatedAt": "2026-06-02",
-	"currentPhase": 1,
+	"currentPhase": 2,
 	"phases": [
 		{
 			"id": 0,
@@ -65,32 +65,32 @@
 		{
 			"id": 2,
 			"name": "Procedural SVG Notation Renderer",
-			"status": "pending",
+			"status": "done",
 			"tasks": [
 				{
 					"id": "2.1",
-					"desc": "layout.ts: notePosition + beamGroups",
-					"status": "pending"
+					"desc": "layout.ts: notePosition (treble y-map) + beamGroups + staffGeometry",
+					"status": "done"
 				},
 				{
 					"id": "2.2",
-					"desc": "accidentals.ts: sharp/flat glyph specs",
-					"status": "pending"
+					"desc": "accidentals.ts: geometric sharp/flat path specs",
+					"status": "done"
 				},
 				{
 					"id": "2.3",
-					"desc": "render.ts: phraseToSVG (staff, clef, noteheads, stems, beams)",
-					"status": "pending"
+					"desc": "render.ts: phraseToSVG (staff, clef, noteheads, stems, beams, ledger lines, accidentals)",
+					"status": "done"
 				},
 				{
 					"id": "2.4",
-					"desc": "<NotationCanvas> renders SVGElementSpec[] with hand-scored CSS",
-					"status": "pending"
+					"desc": "<NotationCanvas> renders SVGElementSpec[] with hand-scored ink filter + notation.css",
+					"status": "done"
 				},
 				{
 					"id": "2.5",
-					"desc": "End-to-end: hum -> quantize -> render",
-					"status": "pending"
+					"desc": "End-to-end: hum -> quantize -> render in App.tsx",
+					"status": "done"
 				}
 			]
 		},

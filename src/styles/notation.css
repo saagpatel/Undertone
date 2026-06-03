@@ -1,0 +1,51 @@
+/* Hand-scored sheet music: warm paper, ink strokes, a touch of irregularity
+   from the SVG displacement filter in <NotationCanvas>. */
+.notation {
+	width: 100%;
+	max-width: 36rem;
+	height: auto;
+	color: var(--ink);
+}
+
+.notation .staff-line,
+.notation .ledger-line,
+.notation .stem,
+.notation .beam,
+.notation .accidental {
+	stroke: var(--ink);
+	stroke-linecap: round;
+	fill: none;
+}
+
+.notation .staff-line,
+.notation .ledger-line {
+	stroke-width: 1.4;
+}
+
+.notation .stem {
+	stroke-width: 1.6;
+}
+
+.notation .beam {
+	stroke-width: 5;
+}
+
+.notation .accidental {
+	stroke-width: 1.4;
+}
+
+/* Noteheads carry their fill via a presentation attribute (currentColor when
+   filled, none when open) so the Phase 3 standalone export stays self-contained. */
+.notation .notehead {
+	stroke: var(--ink);
+	stroke-width: 0.6;
+}
+
+.notation .notehead--open {
+	stroke-width: 1.8;
+}
+
+.notation .clef {
+	fill: var(--ink);
+	font-family: var(--font-display);
+}

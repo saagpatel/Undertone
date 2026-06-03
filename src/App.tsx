@@ -1,5 +1,5 @@
 import { CaptureButton } from "./components/CaptureButton";
-import { PhrasePreview } from "./components/PhrasePreview";
+import { NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
 import { useCapture } from "./hooks/useCapture";
 
@@ -15,10 +15,18 @@ export default function App() {
 			</header>
 
 			<section className="app__stage">
-				{isCapturing || !phrase ? (
-					<PitchMeter pitch={isCapturing ? pitch : null} />
+				{isCapturing ? (
+					<PitchMeter pitch={pitch} />
+				) : phrase ? (
+					phrase.notes.length > 0 ? (
+						<NotationCanvas phrase={phrase} />
+					) : (
+						<p className="app__empty">
+							No notes caught — try humming a little louder.
+						</p>
+					)
 				) : (
-					<PhrasePreview phrase={phrase} />
+					<PitchMeter pitch={null} />
 				)}
 			</section>
 
@@ -29,7 +37,7 @@ export default function App() {
 						{error}
 					</p>
 				) : (
-					<p className="app__hint">Phase 1 · capture + quantize</p>
+					<p className="app__hint">Phase 2 · hum → sheet music</p>
 				)}
 			</div>
 		</main>

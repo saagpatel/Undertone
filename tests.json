@@ -95,49 +95,71 @@
 		{
 			"phase": 2,
 			"file": "src/notation/layout.test.ts",
-			"status": "planned",
+			"status": "passing",
 			"cases": [
 				{
-					"name": "C3-C6 chromatic notes -> correct staff-y values",
-					"status": "planned"
+					"name": "notePosition places the five staff lines (F5/D5/B4/G4/E4)",
+					"status": "passing"
+				},
+				{ "name": "notePosition places the staff spaces", "status": "passing" },
+				{
+					"name": "C4 maps one ledger line below the bottom line",
+					"status": "passing"
 				},
 				{
-					"name": "C4 (middle C) -> one ledger line below the staff",
-					"status": "planned"
+					"name": "A5 maps one ledger line above the top line",
+					"status": "passing"
 				},
 				{
-					"name": "beamGroups groups consecutive eighth/sixteenth notes",
-					"status": "planned"
+					"name": "notePosition is monotonic across octaves 3-6",
+					"status": "passing"
+				},
+				{
+					"name": "diatonicValue orders pitches by absolute step",
+					"status": "passing"
+				},
+				{
+					"name": "beamGroups groups consecutive eighth/sixteenth runs",
+					"status": "passing"
 				}
 			]
 		},
 		{
 			"phase": 2,
 			"file": "src/notation/accidentals.test.ts",
-			"status": "planned",
+			"status": "passing",
 			"cases": [
-				{
-					"name": "F# -> sharp SVGElementSpec with correct attrs",
-					"status": "planned"
-				}
+				{ "name": "natural returns null", "status": "passing" },
+				{ "name": "sharp -> non-empty stroked path spec", "status": "passing" },
+				{ "name": "flat -> non-empty stroked path spec", "status": "passing" }
 			]
 		},
 		{
 			"phase": 2,
 			"file": "src/notation/render.test.ts",
-			"status": "planned",
+			"status": "passing",
 			"cases": [
+				{ "name": "draws exactly 5 staff lines", "status": "passing" },
+				{ "name": "draws one treble clef as text", "status": "passing" },
 				{
-					"name": "fixture-phrase -> exactly 5 staff lines",
-					"status": "planned"
+					"name": "3 noteheads at correct staff-y positions",
+					"status": "passing"
 				},
 				{
-					"name": "fixture-phrase -> 3 noteheads at correct y-coords",
-					"status": "planned"
+					"name": "half note renders as a single open notehead",
+					"status": "passing"
 				},
 				{
-					"name": "stems on quarter notes, no beam on the half note",
-					"status": "planned"
+					"name": "stem on every non-whole note, no beam",
+					"status": "passing"
+				},
+				{
+					"name": "ledger line for middle C below the staff",
+					"status": "passing"
+				},
+				{
+					"name": "stem direction: up below B4, down at/above B4",
+					"status": "passing"
 				}
 			]
 		},
