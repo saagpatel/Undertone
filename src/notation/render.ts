@@ -1,6 +1,7 @@
+import { type AccompanimentStyle, patternize } from "../dsp/accompaniment";
 import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
-import { type VoicedTone, voiceChord } from "../dsp/voicing";
+import { type VoicedChord, type VoicedTone, voiceChord } from "../dsp/voicing";
 import { accidentalFor } from "./accidentals";
 import { bassClef, brace, trebleClef } from "./clef";
 import {
@@ -36,6 +37,7 @@ export function phraseToSVG(
 	phrase: Phrase,
 	geom: StaffGeometry,
 	chords?: Chord[],
+	style: AccompanimentStyle = "block",
 ): SVGElementSpec[] {
 	const specs: SVGElementSpec[] = [];
 	const ls = geom.lineSpacing;
@@ -162,7 +164,7 @@ export function phraseToSVG(
 
 		// 6. Grand staff: a braced bass staff under the treble, engraving each
 		//    chord's accompaniment aligned to the same beat columns.
-		specs.push(...bassStaffSpecs(phrase, geom, chords, rx, ry));
+		specs.push(...bassStaffSpecs(phrase, geom, chords, rx, ry, style));
 	}
 
 	return specs;
@@ -180,9 +182,11 @@ function bassStaffSpecs(
 	chords: Chord[],
 	rx: number,
 	ry: number,
+	style: AccompanimentStyle,
 ): SVGElementSpec[] {
 	const geom = bassStaffGeometry(trebleGeom);
 	const ls = geom.lineSpacing;
+	const middleLineY = geom.y + ((geom.numLines - 1) / 2) * ls;
 	const specs: SVGElementSpec[] = [];
 
 	// Brace + bass staff lines + bass clef — the "frame", revealed as a unit.
@@ -214,24 +218,32 @@ function bassStaffSpecs(
 		const voiced = voiceChord(chord);
 		const chordSpecs: SVGElementSpec[] = [];
 
-		// Bass voice (root): its own stem, pointing DOWN (lower voice convention).
-		const bassCy = toneHead(
-			voiced.bass,
-			cx,
-			geom,
-			rx,
-			ry,
-			"bass-note",
-			chordSpecs,
+		// Broken styles spread the voices across the slot at their sub-beat x
+		// columns (beatToX stays the single source of x). If those columns would
+		// be narrower than a notehead — the per-beat-slot fallback for very short
+		// phrases — collapse to a block stack so the heads never overlap; the
+		// audio still arpeggiates.
+		const timed =
+			style === "block" ? null : patternize(voiced, style, chord.beats);
+		const xs = timed?.map((t) =>
+			beatToX(chord.beatPosition + t.beatOffset, geom),
 		);
-		chordSpecs.push(verticalStem([bassCy], cx, rx, ls, false));
+		const minGap = xs
+			? xs.slice(1).reduce((m, x, i) => Math.min(m, x - xs[i]), Infinity)
+			: 0;
 
-		// Upper voice (triad): three heads sharing one stem, pointing UP.
-		const triadCys = voiced.triad.map((tone) =>
-			toneHead(tone, cx, geom, rx, ry, "chord-tone", chordSpecs),
-		);
-		if (triadCys.length > 0)
-			chordSpecs.push(verticalStem(triadCys, cx, rx, ls, true));
+		if (!timed || !xs || minGap < rx * 2) {
+			engraveBlockChord(voiced, cx, geom, rx, ry, ls, chordSpecs);
+		} else {
+			// One stem-bearing notehead per voice at its own column, reading
+			// left-to-right in time; stem direction by staff position like a melody note.
+			timed.forEach((t, i) => {
+				const tx = xs[i];
+				const extraClass = t.tone === voiced.bass ? "bass-note" : "chord-tone";
+				const cy = toneHead(t.tone, tx, geom, rx, ry, extraClass, chordSpecs);
+				chordSpecs.push(verticalStem([cy], tx, rx, ls, cy > middleLineY));
+			});
+		}
 
 		const reveal = revealForBeat(chord.beatPosition);
 		for (const spec of chordSpecs) spec.reveal = reveal;
@@ -239,6 +251,30 @@ function bassStaffSpecs(
 	}
 
 	return specs;
+}
+
+/**
+ * Engrave a block chord into `out`: the bass root with its own stem-down, and
+ * the triad as three heads sharing one stem-up. This is the v2 grand-staff
+ * texture — used for `block` style and as the legible fallback when a slot is
+ * too narrow to spread a broken pattern.
+ */
+function engraveBlockChord(
+	voiced: VoicedChord,
+	cx: number,
+	geom: StaffGeometry,
+	rx: number,
+	ry: number,
+	ls: number,
+	out: SVGElementSpec[],
+): void {
+	const bassCy = toneHead(voiced.bass, cx, geom, rx, ry, "bass-note", out);
+	out.push(verticalStem([bassCy], cx, rx, ls, false));
+
+	const triadCys = voiced.triad.map((tone) =>
+		toneHead(tone, cx, geom, rx, ry, "chord-tone", out),
+	);
+	if (triadCys.length > 0) out.push(verticalStem(triadCys, cx, rx, ls, true));
 }
 
 /**

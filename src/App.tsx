@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CaptureButton } from "./components/CaptureButton";
 import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
+import type { AccompanimentStyle } from "./dsp/accompaniment";
 import { harmonize } from "./dsp/harmony";
 import { detectKey } from "./dsp/key";
 import { useCapture } from "./hooks/useCapture";
@@ -10,6 +11,16 @@ import { serializePhraseSVG } from "./notation/serialize";
 
 /** localStorage key for the most recent captured phrase (local-only, optional). */
 const STORAGE_KEY = "undertone.lastPhrase";
+
+/** Accompaniment textures, in selector order. Block is the default (v2 parity). */
+const STYLE_OPTIONS: ReadonlyArray<{
+	value: AccompanimentStyle;
+	label: string;
+}> = [
+	{ value: "block", label: "Block" },
+	{ value: "arpeggio", label: "Arpeggio" },
+	{ value: "alberti", label: "Alberti" },
+];
 
 export default function App() {
 	const { pitch, phrase, isCapturing, error, start, stop } = useCapture();
@@ -22,7 +33,8 @@ export default function App() {
 				: [],
 		[phrase],
 	);
-	const playback = usePlayback(phrase, chords);
+	const [style, setStyle] = useState<AccompanimentStyle>("block");
+	const playback = usePlayback(phrase, chords, style);
 	const status = isCapturing ? "recording" : phrase ? "done" : "idle";
 	const hasNotes = !!phrase && phrase.notes.length > 0;
 
@@ -39,7 +51,7 @@ export default function App() {
 
 	const handleExport = () => {
 		if (!hasNotes || !phrase) return;
-		const svg = serializePhraseSVG(phrase, NOTATION_GEOM, chords);
+		const svg = serializePhraseSVG(phrase, NOTATION_GEOM, chords, style);
 		const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
 		const link = document.createElement("a");
 		link.href = url;
@@ -62,7 +74,7 @@ export default function App() {
 					<PitchMeter pitch={pitch} />
 				) : phrase ? (
 					hasNotes ? (
-						<NotationCanvas phrase={phrase} chords={chords} />
+						<NotationCanvas phrase={phrase} chords={chords} style={style} />
 					) : (
 						<p className="app__empty">
 							No notes caught — try humming a little louder.
@@ -75,6 +87,30 @@ export default function App() {
 
 			<div className="app__controls">
 				<CaptureButton status={status} onStart={start} onStop={stop} />
+
+				{hasNotes && (
+					<div
+						className="style-selector"
+						role="group"
+						aria-label="Accompaniment style"
+					>
+						{STYLE_OPTIONS.map((opt) => (
+							<button
+								key={opt.value}
+								type="button"
+								aria-pressed={style === opt.value}
+								className={
+									style === opt.value
+										? "style-selector__option is-selected"
+										: "style-selector__option"
+								}
+								onClick={() => setStyle(opt.value)}
+							>
+								{opt.label}
+							</button>
+						))}
+					</div>
+				)}
 
 				{hasNotes && (
 					<div className="score-actions">

@@ -1,4 +1,5 @@
 import { type CSSProperties, createElement } from "react";
+import type { AccompanimentStyle } from "../dsp/accompaniment";
 import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { notationHeight, staffGeometry } from "../notation/layout";
@@ -46,13 +47,15 @@ function specToElement(spec: SVGElementSpec, key: number, delayMs?: number) {
 export function NotationCanvas({
 	phrase,
 	chords,
+	style = "block",
 	animate = true,
 }: {
 	phrase: Phrase;
 	chords?: Chord[];
+	style?: AccompanimentStyle;
 	animate?: boolean;
 }) {
-	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords);
+	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords, style);
 	// The viewBox grows to the bass staff only when there's harmony to engrave.
 	const viewH = notationHeight(NOTATION_GEOM, isHarmonized(chords));
 	const count = phrase.notes.length;
