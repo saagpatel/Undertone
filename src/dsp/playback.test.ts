@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { fixturePhrase } from "../../tests/fixtures/fixture-phrase";
-import { buildSchedule, scheduleDuration } from "./playback";
+import type { Chord } from "./harmony";
+import {
+	buildAccompanimentSchedule,
+	buildSchedule,
+	scheduleDuration,
+} from "./playback";
 import { noteFrequency, type Phrase } from "./quantize";
 
 describe("noteFrequency (inverse of frequencyToPitch)", () => {
@@ -87,5 +92,134 @@ describe("scheduleDuration", () => {
 
 	it("is zero for an empty schedule", () => {
 		expect(scheduleDuration([])).toBe(0);
+	});
+});
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Minimal Chord fixture: C-major, beats 0–4 at 120 BPM. */
+function makeCMajorChord(beatPosition = 0, beats = 4): Chord {
+	return {
+		roman: "I",
+		degree: 1,
+		quality: "major",
+		root: { pitch: "C", accidental: null },
+		tones: [
+			{ pitch: "C", accidental: null },
+			{ pitch: "E", accidental: null },
+			{ pitch: "G", accidental: null },
+		],
+		symbol: "C",
+		beatPosition,
+		beats,
+	};
+}
+
+/** A-minor chord, beats 4–8. */
+function makeAMinorChord(beatPosition = 4, beats = 4): Chord {
+	return {
+		roman: "vi",
+		degree: 6,
+		quality: "minor",
+		root: { pitch: "A", accidental: null },
+		tones: [
+			{ pitch: "A", accidental: null },
+			{ pitch: "C", accidental: null },
+			{ pitch: "E", accidental: null },
+		],
+		symbol: "Am",
+		beatPosition,
+		beats,
+	};
+}
+
+// ─── buildAccompanimentSchedule ───────────────────────────────────────────────
+
+describe("buildAccompanimentSchedule — empty input", () => {
+	it("returns an empty array for no chords", () => {
+		expect(buildAccompanimentSchedule([], 120)).toEqual([]);
+	});
+});
+
+describe("buildAccompanimentSchedule — single C-major chord @ 120 BPM", () => {
+	const BPM = 120;
+	const chord = makeCMajorChord(0, 4);
+	const schedule = buildAccompanimentSchedule([chord], BPM);
+
+	it("emits exactly 4 entries (bass + 3 triad tones)", () => {
+		expect(schedule).toHaveLength(4);
+	});
+
+	it("all notes share the chord's startSec (beat 0 → 0 s)", () => {
+		for (const note of schedule) {
+			expect(note.startSec).toBeCloseTo(0, 6);
+		}
+	});
+
+	it("all notes share the chord's durationSec (4 beats @ 120 BPM → 2 s)", () => {
+		const expected = 4 * (60 / BPM); // 2.0 s
+		for (const note of schedule) {
+			expect(note.durationSec).toBeCloseTo(expected, 5);
+		}
+	});
+
+	it("bass note (C2) is one octave below the triad root (C3)", () => {
+		const bassFreq = noteFrequency({ pitch: "C", accidental: null, octave: 2 });
+		const rootFreq = noteFrequency({ pitch: "C", accidental: null, octave: 3 });
+		// First entry is the bass.
+		expect(schedule[0].frequency).toBeCloseTo(bassFreq, 4);
+		// Second entry is the triad root (C3).
+		expect(schedule[1].frequency).toBeCloseTo(rootFreq, 4);
+		// Bass is exactly one octave below triad root.
+		expect(schedule[1].frequency).toBeCloseTo(schedule[0].frequency * 2, 4);
+	});
+
+	it("triad entries are in ascending frequency (C3 < E3 < G3)", () => {
+		// entries 1,2,3 are the triad tones
+		expect(schedule[2].frequency).toBeGreaterThan(schedule[1].frequency);
+		expect(schedule[3].frequency).toBeGreaterThan(schedule[2].frequency);
+	});
+});
+
+describe("buildAccompanimentSchedule — two chords", () => {
+	const BPM = 90;
+	const spb = 60 / BPM; // seconds per beat
+	const chords = [makeCMajorChord(0, 4), makeAMinorChord(4, 4)];
+	const schedule = buildAccompanimentSchedule(chords, BPM);
+
+	it("count === chords.length * 4", () => {
+		expect(schedule).toHaveLength(chords.length * 4);
+	});
+
+	it("second chord entries start at beat 4 in seconds", () => {
+		const expectedStart = 4 * spb;
+		for (const note of schedule.slice(4)) {
+			expect(note.startSec).toBeCloseTo(expectedStart, 5);
+		}
+	});
+
+	it("uses the same 60/bpm beat math as buildSchedule (shared time base)", () => {
+		// buildSchedule on a note at beat 4 also yields startSec = 4 * (60/bpm)
+		const melodyNote: import("./quantize").NoteEvent = {
+			pitch: "A",
+			accidental: null,
+			octave: 4,
+			noteValue: "quarter",
+			beatPosition: 4,
+		};
+		const melodySchedule = buildSchedule({
+			notes: [melodyNote],
+			bpm: BPM,
+			timeSignatureNumerator: 4,
+			timeSignatureDenominator: 4,
+		});
+		expect(melodySchedule[0].startSec).toBeCloseTo(schedule[4].startSec, 5);
+	});
+
+	it("each chord has the correct durationSec (4 beats @ 90 BPM)", () => {
+		const expectedDur = 4 * spb;
+		for (const note of schedule) {
+			expect(note.durationSec).toBeCloseTo(expectedDur, 5);
+		}
 	});
 });

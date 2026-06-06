@@ -114,3 +114,29 @@
 		stroke-dashoffset: 0;
 	}
 }
+
+/* --- Chord symbols above the staff (Phase 5) ---
+   Rendered in a sibling <g> OUTSIDE the ink displacement filter so labels
+   stay crisp while all notes and staff strokes keep the hand-scored wobble.
+   Georgia / Palatino is a humanist serif that suits the hand-scored aesthetic
+   without being sterile (no Inter / Roboto / Arial / system-ui). */
+.notation .chord-symbol {
+	fill: var(--ink);
+	font-family: Georgia, Palatino, "Palatino Linotype", "Book Antiqua", serif;
+	font-size: 0.82rem;
+	font-weight: 500;
+}
+
+/* Chord symbols receive animationDelay:0ms (reveal:'frame'), so they fade in
+   with the staff. The rule lives on the parent g so the sibling combinator
+   works even though chord-symbol lives outside notation__ink. */
+.notation__chords .chord-symbol {
+	animation: ut-fade 420ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.notation__chords .chord-symbol {
+		animation: none;
+		opacity: 1;
+	}
+}

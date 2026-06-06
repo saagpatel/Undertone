@@ -1,4 +1,5 @@
 import { type CSSProperties, createElement } from "react";
+import type { Chord } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { staffGeometry } from "../notation/layout";
 import { phraseToSVG } from "../notation/render";
@@ -47,12 +48,14 @@ function specToElement(spec: SVGElementSpec, key: number, delayMs?: number) {
  */
 export function NotationCanvas({
 	phrase,
+	chords,
 	animate = true,
 }: {
 	phrase: Phrase;
+	chords?: Chord[];
 	animate?: boolean;
 }) {
-	const specs = phraseToSVG(phrase, NOTATION_GEOM);
+	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords);
 	const count = phrase.notes.length;
 	const step =
 		count > 1 ? (LAST_NOTE_START_MS - FRAME_LEAD_MS) / (count - 1) : 0;
@@ -62,6 +65,11 @@ export function NotationCanvas({
 		if (reveal === undefined || reveal === "frame") return 0;
 		return Math.round(FRAME_LEAD_MS + reveal * step);
 	};
+
+	// Chord-symbol specs render OUTSIDE the ink filter so labels stay crisp,
+	// while all other notation keeps the hand-scored displacement wobble.
+	const inkSpecs = specs.filter((s) => s.className !== "chord-symbol");
+	const chordSpecs = specs.filter((s) => s.className === "chord-symbol");
 
 	return (
 		<svg
@@ -83,14 +91,25 @@ export function NotationCanvas({
 					<feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" />
 				</filter>
 			</defs>
+			{/* Staff, clef, notes — pass through the ink displacement filter */}
 			<g
 				className={
 					animate ? "notation__ink notation__ink--animate" : "notation__ink"
 				}
 				filter="url(#undertone-ink)"
 			>
-				{specs.map((spec, i) => specToElement(spec, i, delayFor(spec.reveal)))}
+				{inkSpecs.map((spec, i) =>
+					specToElement(spec, i, delayFor(spec.reveal)),
+				)}
 			</g>
+			{/* Chord symbols — crisp, no filter, but still participate in reveal */}
+			{chordSpecs.length > 0 && (
+				<g className="notation__chords">
+					{chordSpecs.map((spec, i) =>
+						specToElement(spec, i, delayFor(spec.reveal)),
+					)}
+				</g>
+			)}
 		</svg>
 	);
 }

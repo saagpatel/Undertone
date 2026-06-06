@@ -1,11 +1,10 @@
+import type { Chord } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { accidentalFor } from "./accidentals";
 import { trebleClef } from "./clef";
-import { beamGroups, isBeamable, notePosition } from "./layout";
+import { beamGroups, beatToX, isBeamable, notePosition } from "./layout";
 import type { StaffGeometry, SVGElementSpec } from "./types";
 
-const CLEF_GAP_FACTOR = 4; // staff spaces reserved for the clef before note 1
-const PIXELS_PER_BEAT_FACTOR = 3.2; // horizontal spread per quarter-note beat
 const STEM_LENGTH_FACTOR = 3.5;
 const NOTEHEAD_RX_FACTOR = 0.7;
 const NOTEHEAD_RY_FACTOR = 0.5; // rx/ry ≈ 1.4 → wider than tall
@@ -18,10 +17,12 @@ const isOpenHead = (phrase: Phrase["notes"][number]): boolean =>
 /**
  * Render a quantized {@link Phrase} into framework-agnostic SVG primitives:
  * staff, clef, ledger lines, accidentals, noteheads, stems, and beams.
+ * When `chords` is provided, appends one text spec per chord above the staff.
  */
 export function phraseToSVG(
 	phrase: Phrase,
 	geom: StaffGeometry,
+	chords?: Chord[],
 ): SVGElementSpec[] {
 	const specs: SVGElementSpec[] = [];
 	const ls = geom.lineSpacing;
@@ -31,10 +32,7 @@ export function phraseToSVG(
 	const bottomLineY = geom.y + (geom.numLines - 1) * ls;
 	const middleLineY = geom.y + ((geom.numLines - 1) / 2) * ls;
 
-	const leftMargin = geom.x + ls * CLEF_GAP_FACTOR;
-	const pxPerBeat = ls * PIXELS_PER_BEAT_FACTOR;
-	const noteX = (beatPosition: number): number =>
-		leftMargin + beatPosition * pxPerBeat;
+	const noteX = (beatPosition: number): number => beatToX(beatPosition, geom);
 	const stemUpAt = (cy: number): boolean => cy > middleLineY; // below middle line → stem up
 
 	// 1. Staff lines (revealed with the clef as one "frame" that fades in).
@@ -136,6 +134,24 @@ export function phraseToSVG(
 			className: "beam",
 			reveal: lastIndex,
 		});
+	}
+
+	// 5. Chord symbols: one text label per chord, revealed with the frame so they
+	//    appear before individual notes animate in. Placed above the top staff line.
+	if (chords && chords.length > 0) {
+		for (const chord of chords) {
+			specs.push({
+				kind: "text",
+				text: chord.symbol,
+				attrs: {
+					x: round(beatToX(chord.beatPosition, geom)),
+					y: round(geom.y - geom.lineSpacing * 1.6),
+					textAnchor: "start",
+				},
+				className: "chord-symbol",
+				reveal: "frame",
+			});
+		}
 	}
 
 	return specs;

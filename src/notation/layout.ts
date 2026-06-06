@@ -2,6 +2,20 @@ import type { NoteEvent, NoteName, NoteValue } from "../dsp/quantize";
 import type { StaffGeometry } from "./types";
 
 export const DEFAULT_LINE_SPACING = 10;
+
+/** Horizontal factors for beat→x mapping. Kept here as the single source of truth. */
+export const CLEF_GAP_FACTOR = 4; // staff spaces reserved for the clef before note 1
+export const PIXELS_PER_BEAT_FACTOR = 3.2; // horizontal spread per quarter-note beat
+
+/**
+ * Convert a beat position to an x-coordinate on the staff.
+ * The clef + gap occupies `CLEF_GAP_FACTOR` line spacings to the left of beat 0.
+ */
+export function beatToX(beatPosition: number, geom: StaffGeometry): number {
+	const leftMargin = geom.x + geom.lineSpacing * CLEF_GAP_FACTOR;
+	const pxPerBeat = geom.lineSpacing * PIXELS_PER_BEAT_FACTOR;
+	return leftMargin + beatPosition * pxPerBeat;
+}
 const STAFF_LINES = 5;
 
 /** Diatonic position within an octave (C=0 .. B=6). Accidentals don't shift it. */
