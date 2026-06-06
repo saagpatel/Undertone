@@ -124,6 +124,22 @@ describe("chord symbols", () => {
 		expect(symbols.every((s) => s.reveal === "frame")).toBe(true);
 	});
 
+	it("left-anchors chord symbols that comfortably fit before the right edge", () => {
+		// testChords sit at beats 0 and 2 — nowhere near the right viewBox edge.
+		const specs = phraseToSVG(fixturePhrase, geomChords, testChords);
+		const symbols = specs.filter((s) => hasClass(s, "chord-symbol"));
+		expect(symbols.every((s) => s.attrs.textAnchor === "start")).toBe(true);
+	});
+
+	it("end-anchors a chord symbol near the right edge so it stays on-page", () => {
+		// A chord far to the right: a left-anchored label would spill past the
+		// viewBox, so it should anchor at its end and grow leftward instead.
+		const rightChord: Chord[] = [{ ...testChords[0], beatPosition: 8 }];
+		const specs = phraseToSVG(fixturePhrase, geomChords, rightChord);
+		const symbol = specs.find((s) => hasClass(s, "chord-symbol"));
+		expect(symbol?.attrs.textAnchor).toBe("end");
+	});
+
 	it("omitting chords produces ZERO chord-symbol specs; one per chord when present", () => {
 		const withoutChords = phraseToSVG(fixturePhrase, geomChords);
 		const withChords = phraseToSVG(fixturePhrase, geomChords, testChords);

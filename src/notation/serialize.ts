@@ -1,4 +1,4 @@
-import type { Chord } from "../dsp/harmony";
+import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { notationHeight } from "./layout";
 import { phraseToSVG } from "./render";
@@ -101,7 +101,7 @@ export function serializePhraseSVG(
 	chords?: Chord[],
 ): string {
 	const viewW = geom.x * 2 + geom.width;
-	const viewH = notationHeight(geom, Boolean(chords && chords.length > 0));
+	const viewH = notationHeight(geom, isHarmonized(chords));
 	const elements = phraseToSVG(phrase, geom, chords)
 		.map(serializeElement)
 		.join("");

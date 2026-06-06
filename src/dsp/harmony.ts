@@ -43,6 +43,16 @@ export interface Chord {
 	beats: number;
 }
 
+/**
+ * Whether a phrase carries harmony to engrave. The single predicate that gates
+ * grand-staff rendering and viewport growth, so the renderer, the export, and
+ * the canvas can't drift on what "has chords" means. Narrows `chords` to a
+ * non-empty `Chord[]` for callers.
+ */
+export function isHarmonized(chords: Chord[] | undefined): chords is Chord[] {
+	return chords !== undefined && chords.length > 0;
+}
+
 // ─── Semitone helpers ─────────────────────────────────────────────────────────
 
 const NATURAL_SEMITONES: Record<NoteName, number> = {

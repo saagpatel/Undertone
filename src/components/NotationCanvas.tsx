@@ -1,5 +1,5 @@
 import { type CSSProperties, createElement } from "react";
-import type { Chord } from "../dsp/harmony";
+import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { notationHeight, staffGeometry } from "../notation/layout";
 import { phraseToSVG } from "../notation/render";
@@ -54,10 +54,7 @@ export function NotationCanvas({
 }) {
 	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords);
 	// The viewBox grows to the bass staff only when there's harmony to engrave.
-	const viewH = notationHeight(
-		NOTATION_GEOM,
-		Boolean(chords && chords.length > 0),
-	);
+	const viewH = notationHeight(NOTATION_GEOM, isHarmonized(chords));
 	const count = phrase.notes.length;
 	const step =
 		count > 1 ? (LAST_NOTE_START_MS - FRAME_LEAD_MS) / (count - 1) : 0;

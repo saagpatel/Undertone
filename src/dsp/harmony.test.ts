@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chordSymbol, harmonize } from "./harmony";
+import { chordSymbol, harmonize, isHarmonized } from "./harmony";
 import type { Key } from "./key";
 import type { Phrase } from "./quantize";
 
@@ -34,6 +34,28 @@ const C_MAJOR: Key = { tonic: "C", accidental: null, mode: "major" };
 const A_MINOR: Key = { tonic: "A", accidental: null, mode: "minor" };
 const G_MAJOR: Key = { tonic: "G", accidental: null, mode: "major" };
 const F_MAJOR: Key = { tonic: "F", accidental: null, mode: "major" };
+
+// ─── Tests — isHarmonized ─────────────────────────────────────────────────────
+
+describe("isHarmonized", () => {
+	it("is false for undefined or an empty chord array", () => {
+		expect(isHarmonized(undefined)).toBe(false);
+		expect(isHarmonized([])).toBe(false);
+	});
+
+	it("is true for a non-empty chord array", () => {
+		const chords = harmonize(
+			makePhrase([
+				["C", null, 4, 0],
+				["E", null, 4, 1],
+				["G", null, 4, 2],
+				["C", null, 5, 3],
+			]),
+			C_MAJOR,
+		);
+		expect(isHarmonized(chords)).toBe(true);
+	});
+});
 
 // ─── Tests — harmonize ───────────────────────────────────────────────────────
 

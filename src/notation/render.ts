@@ -1,4 +1,4 @@
-import type { Chord } from "../dsp/harmony";
+import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { type VoicedTone, voiceChord } from "../dsp/voicing";
 import { accidentalFor } from "./accidentals";
@@ -82,19 +82,7 @@ export function phraseToSVG(
 			noteSpecs.push(accidental);
 		}
 
-		const open = isOpenHead(note);
-		noteSpecs.push({
-			kind: "ellipse",
-			attrs: {
-				cx: round(cx),
-				cy: round(cy),
-				rx: round(rx),
-				ry: round(ry),
-				transform: `rotate(${NOTEHEAD_TILT_DEG} ${round(cx)} ${round(cy)})`,
-				fill: open ? "none" : "currentColor",
-			},
-			className: open ? "notehead notehead--open" : "notehead",
-		});
+		noteSpecs.push(noteheadEllipse(cx, cy, rx, ry, { open: isOpenHead(note) }));
 
 		// Whole notes carry no stem; everything else does.
 		if (note.noteValue !== "whole") {
@@ -151,15 +139,21 @@ export function phraseToSVG(
 
 	// 5. Chord symbols: one text label per chord, revealed with the frame so they
 	//    appear before individual notes animate in. Placed above the top staff line.
-	if (chords && chords.length > 0) {
+	if (isHarmonized(chords)) {
+		// The viewBox right edge (matches the canvas + export); labels near it
+		// anchor at their end so they grow leftward instead of spilling off-page.
+		const rightEdge = geom.x * 2 + geom.width;
+		const charWidth = geom.lineSpacing * 0.55; // rough serif advance at label size
 		for (const chord of chords) {
+			const x = beatToX(chord.beatPosition, geom);
+			const overflowsRight = x + chord.symbol.length * charWidth > rightEdge;
 			specs.push({
 				kind: "text",
 				text: chord.symbol,
 				attrs: {
-					x: round(beatToX(chord.beatPosition, geom)),
+					x: round(x),
 					y: round(geom.y - geom.lineSpacing * 1.6),
-					textAnchor: "start",
+					textAnchor: overflowsRight ? "end" : "start",
 				},
 				className: "chord-symbol",
 				reveal: "frame",
@@ -280,7 +274,31 @@ function toneHead(
 	}
 
 	// Chord noteheads are always filled (the accompaniment is rhythmically neutral).
-	out.push({
+	out.push(noteheadEllipse(cx, cy, rx, ry, { extraClass }));
+
+	return cy;
+}
+
+/**
+ * A tilted elliptical notehead — the one place noteheads are constructed.
+ * Open (half/whole) heads are unfilled with a heavier rim via `notehead--open`;
+ * filled heads carry an optional `extraClass` (e.g. `bass-note` / `chord-tone`)
+ * for styling and testing.
+ */
+function noteheadEllipse(
+	cx: number,
+	cy: number,
+	rx: number,
+	ry: number,
+	opts: { open?: boolean; extraClass?: string },
+): SVGElementSpec {
+	const open = opts.open ?? false;
+	const className = open
+		? "notehead notehead--open"
+		: opts.extraClass
+			? `notehead ${opts.extraClass}`
+			: "notehead";
+	return {
 		kind: "ellipse",
 		attrs: {
 			cx: round(cx),
@@ -288,12 +306,10 @@ function toneHead(
 			rx: round(rx),
 			ry: round(ry),
 			transform: `rotate(${NOTEHEAD_TILT_DEG} ${round(cx)} ${round(cy)})`,
-			fill: "currentColor",
+			fill: open ? "none" : "currentColor",
 		},
-		className: `notehead ${extraClass}`,
-	});
-
-	return cy;
+		className,
+	};
 }
 
 /**
