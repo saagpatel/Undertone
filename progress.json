@@ -1,7 +1,7 @@
 {
 	"project": "Undertone",
-	"updatedAt": "2026-06-02",
-	"currentPhase": 2,
+	"updatedAt": "2026-06-06",
+	"currentPhase": 3,
 	"phases": [
 		{
 			"id": 0,
@@ -97,26 +97,97 @@
 		{
 			"id": 3,
 			"name": "Polish - Reveal Animation, Playback, Export",
-			"status": "pending",
+			"status": "done",
 			"tasks": [
 				{
 					"id": "3.1",
-					"desc": "<RevealOverlay> ink-draw animation",
-					"status": "pending"
+					"desc": "Reveal ink-draw animation in <NotationCanvas> (frame fade + per-note dashoffset draw + notehead bloom, staggered ~1s, reduced-motion safe)",
+					"status": "done"
 				},
 				{
 					"id": "3.2",
-					"desc": "usePlayback: Web Audio oscillator playback",
-					"status": "pending"
+					"desc": "usePlayback: Web Audio oscillator playback, single currentTime base, detuned sines + A/R envelope, pure dsp/playback.ts timing",
+					"status": "done"
 				},
 				{
 					"id": "3.3",
-					"desc": "SVG export + optional localStorage save",
-					"status": "pending"
+					"desc": "SVG export (serializePhraseSVG standalone doc) + localStorage save under undertone.lastPhrase",
+					"status": "done"
 				},
 				{
 					"id": "3.4",
-					"desc": "Aesthetic tuning (paper + ink, stroke irregularity)",
+					"desc": "Aesthetic: drawn treble clef path, paper+ink, stronger stroke irregularity",
+					"status": "done"
+				}
+			]
+		},
+		{
+			"id": 4,
+			"name": "v2 Harmonization Engine (pure DSP)",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "4.1",
+					"desc": "key.ts: detectKey via Krumhansl-Schmuckler profile correlation -> { tonic, accidental, mode }",
+					"status": "pending"
+				},
+				{
+					"id": "4.2",
+					"desc": "harmony.ts: harmonize(phrase, key) -> diatonic Chord[] via melody-fit + functional bias + closing cadence",
+					"status": "pending"
+				},
+				{
+					"id": "4.3",
+					"desc": "chordSymbol(chord, key) -> chord-symbol label (C, Am, G)",
+					"status": "pending"
+				}
+			]
+		},
+		{
+			"id": 5,
+			"name": "v2 Audible Accompaniment + Chord Symbols",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "5.1",
+					"desc": "Extend playback schedule + usePlayback with accompaniment voices (block triad + bass root), softer timbre, lower gain, shared time base",
+					"status": "pending"
+				},
+				{
+					"id": "5.2",
+					"desc": "Chord-symbol layer in render.ts above the staff",
+					"status": "pending"
+				},
+				{
+					"id": "5.3",
+					"desc": "Wire App: detectKey + harmonize -> NotationCanvas + usePlayback; export includes symbols",
+					"status": "pending"
+				}
+			]
+		},
+		{
+			"id": 6,
+			"name": "v2 Grand Staff Engraving",
+			"status": "pending",
+			"tasks": [
+				{
+					"id": "6.1",
+					"desc": "bassClef(geom) drawn F-clef path",
+					"status": "pending"
+				},
+				{
+					"id": "6.2",
+					"desc": "Grand-staff geometry: treble + bass + brace, bass-clef y-mapping",
+					"status": "pending"
+				},
+				{
+					"id": "6.3",
+					"desc": "Engrave accompaniment on bass staff (bass note + stacked triad) aligned by shared beat-to-x",
+					"status": "pending"
+				},
+				{
+					"id": "6.4",
+					"desc": "Reveal animation extends to bass staff; export renders full grand staff",
 					"status": "pending"
 				}
 			]

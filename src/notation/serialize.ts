@@ -1,4 +1,6 @@
+import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
+import { notationHeight } from "./layout";
 import { phraseToSVG } from "./render";
 import type { StaffGeometry, SVGElementSpec } from "./types";
 
@@ -33,6 +35,17 @@ const PRESENTATION: Record<string, Record<string, string | number>> = {
 	notehead: { stroke: INK, "stroke-width": 0.6 },
 	"notehead--open": { "stroke-width": 1.8 },
 	clef: { stroke: INK, "stroke-width": 1.6, "stroke-linecap": "round" },
+	// The bass-clef dots are filled blobs, not strokes (unlike the .clef path).
+	"clef-dot": { fill: INK },
+	// The grand-staff brace joining the treble and bass staves.
+	brace: { stroke: INK, "stroke-width": 1.8, "stroke-linecap": "round" },
+	// Chord symbols: text elements need explicit fill because the export wraps
+	// everything in <g fill="none">; without it the text renders invisible.
+	"chord-symbol": {
+		fill: INK,
+		"font-family": "Georgia, 'Times New Roman', serif",
+		"font-size": 11,
+	},
 };
 
 const XML_ESCAPES: Record<string, string> = {
@@ -85,10 +98,13 @@ const INK_FILTER = `<filter id="undertone-ink" x="-8%" y="-8%" width="116%" heig
 export function serializePhraseSVG(
 	phrase: Phrase,
 	geom: StaffGeometry,
+	chords?: Chord[],
 ): string {
 	const viewW = geom.x * 2 + geom.width;
-	const viewH = geom.y * 2 + (geom.numLines - 1) * geom.lineSpacing;
-	const elements = phraseToSVG(phrase, geom).map(serializeElement).join("");
+	const viewH = notationHeight(geom, isHarmonized(chords));
+	const elements = phraseToSVG(phrase, geom, chords)
+		.map(serializeElement)
+		.join("");
 
 	return [
 		'<?xml version="1.0" encoding="UTF-8"?>',

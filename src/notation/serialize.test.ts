@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fixturePhrase } from "../../tests/fixtures/fixture-phrase";
+import type { Chord } from "../dsp/harmony";
 import { staffGeometry } from "./layout";
 import { serializeElement, serializePhraseSVG } from "./serialize";
 import type { SVGElementSpec } from "./types";
@@ -84,5 +85,82 @@ describe("serializePhraseSVG", () => {
 		expect(svg).toContain("#f8f4ec");
 		expect(svg).toContain("feTurbulence");
 		expect(svg).toContain('filter="url(#undertone-ink)"');
+	});
+
+	it("without chords, output is unchanged (no chord-symbol element)", () => {
+		expect(svg).not.toContain('class="chord-symbol"');
+	});
+});
+
+describe("serializePhraseSVG with chords", () => {
+	const chordGeom = staffGeometry({
+		x: 28,
+		y: 72,
+		width: 520,
+		lineSpacing: 13,
+	});
+
+	const testChords: Chord[] = [
+		{
+			roman: "I",
+			degree: 1,
+			quality: "major",
+			root: { pitch: "C", accidental: null },
+			tones: [
+				{ pitch: "C", accidental: null },
+				{ pitch: "E", accidental: null },
+				{ pitch: "G", accidental: null },
+			],
+			symbol: "C",
+			beatPosition: 0,
+			beats: 2,
+		},
+		{
+			roman: "IV",
+			degree: 4,
+			quality: "major",
+			root: { pitch: "F", accidental: null },
+			tones: [
+				{ pitch: "F", accidental: null },
+				{ pitch: "A", accidental: null },
+				{ pitch: "C", accidental: null },
+			],
+			symbol: "F",
+			beatPosition: 2,
+			beats: 2,
+		},
+	];
+
+	const svgWithChords = serializePhraseSVG(
+		fixturePhrase,
+		chordGeom,
+		testChords,
+	);
+
+	it('contains a <text class="chord-symbol" for each chord', () => {
+		const matches = svgWithChords.match(/class="chord-symbol"/g) ?? [];
+		expect(matches).toHaveLength(2);
+	});
+
+	it("chord-symbol elements contain the chord symbol text", () => {
+		expect(svgWithChords).toContain(">C<");
+		expect(svgWithChords).toContain(">F<");
+	});
+
+	it("chord-symbol elements carry an explicit fill attribute", () => {
+		// Every <text class="chord-symbol"> must have a fill attr so text is
+		// visible inside the <g fill="none"> wrapper.
+		const chordEls =
+			svgWithChords.match(/<text[^>]*class="chord-symbol"[^>]*>/g) ?? [];
+		expect(chordEls).toHaveLength(2);
+		for (const el of chordEls) {
+			expect(el).toContain("fill=");
+		}
+	});
+
+	it("document still parses as valid XML when chords are included", () => {
+		const doc = new DOMParser().parseFromString(svgWithChords, "image/svg+xml");
+		expect(doc.querySelector("parsererror")).toBeNull();
+		expect(doc.documentElement.nodeName).toBe("svg");
 	});
 });

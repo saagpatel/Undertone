@@ -2,6 +2,20 @@ import type { NoteEvent, NoteName, NoteValue } from "../dsp/quantize";
 import type { StaffGeometry } from "./types";
 
 export const DEFAULT_LINE_SPACING = 10;
+
+/** Horizontal factors for beat→x mapping. Kept here as the single source of truth. */
+export const CLEF_GAP_FACTOR = 4; // staff spaces reserved for the clef before note 1
+export const PIXELS_PER_BEAT_FACTOR = 3.2; // horizontal spread per quarter-note beat
+
+/**
+ * Convert a beat position to an x-coordinate on the staff.
+ * The clef + gap occupies `CLEF_GAP_FACTOR` line spacings to the left of beat 0.
+ */
+export function beatToX(beatPosition: number, geom: StaffGeometry): number {
+	const leftMargin = geom.x + geom.lineSpacing * CLEF_GAP_FACTOR;
+	const pxPerBeat = geom.lineSpacing * PIXELS_PER_BEAT_FACTOR;
+	return leftMargin + beatPosition * pxPerBeat;
+}
 const STAFF_LINES = 5;
 
 /** Diatonic position within an octave (C=0 .. B=6). Accidentals don't shift it. */
@@ -23,6 +37,9 @@ export function diatonicValue(pitch: NoteName, octave: number): number {
 /** Treble clef: the top staff line is F5; the middle line is B4. */
 const TOP_LINE_DIATONIC = diatonicValue("F", 5); // 38
 export const MIDDLE_LINE_DIATONIC = diatonicValue("B", 4); // 34
+
+/** Bass clef: the top staff line is A3; F3 is the 4th line up (the clef line). */
+const BASS_TOP_LINE_DIATONIC = diatonicValue("A", 3); // 26
 
 export function staffGeometry(
 	opts: Partial<StaffGeometry> = {},
@@ -47,6 +64,77 @@ export function notePosition(
 ): number {
 	const steps = TOP_LINE_DIATONIC - diatonicValue(note.pitch, note.octave);
 	return geom.y + steps * (geom.lineSpacing / 2);
+}
+
+/**
+ * Extra inter-staff gap, in line-spaces, added beyond the continuous diatonic
+ * ruler. A pure continuous ruler (where middle C would bridge both staves on one
+ * shared position) leaves only a 2-space gap, into which octave-4 chord tones —
+ * vi's E4, vii°'s F4 — collide with the treble staff. Widening drops the bass
+ * staff so those tones sit in clear space below the treble. This trades the exact
+ * middle-C bridge for standard-notation divergence (C4 is one ledger below the
+ * treble OR one ledger above the bass — two different y's); x-alignment is
+ * unaffected since both staves still derive x from {@link beatToX}.
+ */
+const INTER_STAFF_GAP_SPACES = 2;
+
+/**
+ * Geometry for the bass staff of a grand staff, derived from the treble staff.
+ * The bass top line (A3) is placed `F5 → A3` (12 diatonic steps = 6 line spaces)
+ * below the treble top line, plus {@link INTER_STAFF_GAP_SPACES} of breathing
+ * room so high chord tones clear the treble staff. Shares the treble's x, width,
+ * and line spacing, so beats line up vertically across the system.
+ */
+export function bassStaffGeometry(treble: StaffGeometry): StaffGeometry {
+	const rulerSpaces = (TOP_LINE_DIATONIC - BASS_TOP_LINE_DIATONIC) / 2; // 6
+	const spacesBelow = rulerSpaces + INTER_STAFF_GAP_SPACES; // 8
+	return {
+		...treble,
+		y: treble.y + spacesBelow * treble.lineSpacing,
+	};
+}
+
+/**
+ * Y-coordinate (px) of a note's vertical center on the BASS staff. Mirrors
+ * {@link notePosition} but references the bass top line (A3) instead of F5.
+ */
+export function notePositionBass(
+	note: Pick<NoteEvent, "pitch" | "octave">,
+	geom: StaffGeometry,
+): number {
+	const steps = BASS_TOP_LINE_DIATONIC - diatonicValue(note.pitch, note.octave);
+	return geom.y + steps * (geom.lineSpacing / 2);
+}
+
+/**
+ * Extra bottom clearance for a grand staff, in line-spaces. The bass voice
+ * descends below the staff — a deep root (octave 2, up to two ledger lines down)
+ * carries a downward stem ~3.5 line-spaces long, which very nearly fills the
+ * symmetric `treble.y` margin on its own. This cushion keeps that stem (and the
+ * ink-displacement wobble around it) inside the viewBox.
+ */
+const GRAND_STAFF_BOTTOM_CUSHION = 1;
+
+/**
+ * Total SVG canvas height for a notation system rendered from `treble`. The
+ * single source of truth for both <NotationCanvas>'s viewBox and the standalone
+ * export, so they never drift. A grand staff spans down to the bass bottom line;
+ * a single staff stops at the treble bottom line. A symmetric margin of
+ * `treble.y` is left below the lowest line (mirroring the top margin); the grand
+ * staff adds {@link GRAND_STAFF_BOTTOM_CUSHION} line-spaces to clear the
+ * descending bass voice.
+ */
+export function notationHeight(
+	treble: StaffGeometry,
+	grandStaff: boolean,
+): number {
+	const lowestLineGeom = grandStaff ? bassStaffGeometry(treble) : treble;
+	const lowestLineY =
+		lowestLineGeom.y + (treble.numLines - 1) * treble.lineSpacing;
+	const cushion = grandStaff
+		? GRAND_STAFF_BOTTOM_CUSHION * treble.lineSpacing
+		: 0;
+	return lowestLineY + treble.y + cushion;
 }
 
 const BEAMABLE: ReadonlySet<NoteValue> = new Set(["eighth", "sixteenth"]);

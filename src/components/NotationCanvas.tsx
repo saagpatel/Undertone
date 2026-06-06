@@ -1,6 +1,7 @@
 import { type CSSProperties, createElement } from "react";
+import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
-import { staffGeometry } from "../notation/layout";
+import { notationHeight, staffGeometry } from "../notation/layout";
 import { phraseToSVG } from "../notation/render";
 import type { RevealRole, SVGElementSpec } from "../notation/types";
 import "../styles/notation.css";
@@ -13,9 +14,6 @@ export const NOTATION_GEOM = staffGeometry({
 	lineSpacing: 13,
 });
 const VIEW_W = NOTATION_GEOM.x * 2 + NOTATION_GEOM.width;
-const VIEW_H =
-	NOTATION_GEOM.y * 2 +
-	(NOTATION_GEOM.numLines - 1) * NOTATION_GEOM.lineSpacing;
 
 // Reveal timing. The frame fades first; notes then stagger in so the last one
 // begins drawing around LAST_NOTE_START_MS, landing the whole reveal near 1 s.
@@ -47,12 +45,16 @@ function specToElement(spec: SVGElementSpec, key: number, delayMs?: number) {
  */
 export function NotationCanvas({
 	phrase,
+	chords,
 	animate = true,
 }: {
 	phrase: Phrase;
+	chords?: Chord[];
 	animate?: boolean;
 }) {
-	const specs = phraseToSVG(phrase, NOTATION_GEOM);
+	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords);
+	// The viewBox grows to the bass staff only when there's harmony to engrave.
+	const viewH = notationHeight(NOTATION_GEOM, isHarmonized(chords));
 	const count = phrase.notes.length;
 	const step =
 		count > 1 ? (LAST_NOTE_START_MS - FRAME_LEAD_MS) / (count - 1) : 0;
@@ -63,10 +65,15 @@ export function NotationCanvas({
 		return Math.round(FRAME_LEAD_MS + reveal * step);
 	};
 
+	// Chord-symbol specs render OUTSIDE the ink filter so labels stay crisp,
+	// while all other notation keeps the hand-scored displacement wobble.
+	const inkSpecs = specs.filter((s) => s.className !== "chord-symbol");
+	const chordSpecs = specs.filter((s) => s.className === "chord-symbol");
+
 	return (
 		<svg
 			className="notation"
-			viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+			viewBox={`0 0 ${VIEW_W} ${viewH}`}
 			preserveAspectRatio="xMidYMid meet"
 			role="img"
 			aria-label="Your hummed melody, rendered as sheet music"
@@ -83,14 +90,25 @@ export function NotationCanvas({
 					<feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" />
 				</filter>
 			</defs>
+			{/* Staff, clef, notes — pass through the ink displacement filter */}
 			<g
 				className={
 					animate ? "notation__ink notation__ink--animate" : "notation__ink"
 				}
 				filter="url(#undertone-ink)"
 			>
-				{specs.map((spec, i) => specToElement(spec, i, delayFor(spec.reveal)))}
+				{inkSpecs.map((spec, i) =>
+					specToElement(spec, i, delayFor(spec.reveal)),
+				)}
 			</g>
+			{/* Chord symbols — crisp, no filter, but still participate in reveal */}
+			{chordSpecs.length > 0 && (
+				<g className="notation__chords">
+					{chordSpecs.map((spec, i) =>
+						specToElement(spec, i, delayFor(spec.reveal)),
+					)}
+				</g>
+			)}
 		</svg>
 	);
 }

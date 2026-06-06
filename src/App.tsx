@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { CaptureButton } from "./components/CaptureButton";
 import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
+import { harmonize } from "./dsp/harmony";
+import { detectKey } from "./dsp/key";
 import { useCapture } from "./hooks/useCapture";
 import { usePlayback } from "./hooks/usePlayback";
 import { serializePhraseSVG } from "./notation/serialize";
@@ -11,7 +13,16 @@ const STORAGE_KEY = "undertone.lastPhrase";
 
 export default function App() {
 	const { pitch, phrase, isCapturing, error, start, stop } = useCapture();
-	const playback = usePlayback(phrase);
+	// Derive the harmonization once per capture: detect the key, then harmonize.
+	// Pure derivations of the immutable phrase — the melody is never mutated.
+	const chords = useMemo(
+		() =>
+			phrase && phrase.notes.length > 0
+				? harmonize(phrase, detectKey(phrase))
+				: [],
+		[phrase],
+	);
+	const playback = usePlayback(phrase, chords);
 	const status = isCapturing ? "recording" : phrase ? "done" : "idle";
 	const hasNotes = !!phrase && phrase.notes.length > 0;
 
@@ -28,7 +39,7 @@ export default function App() {
 
 	const handleExport = () => {
 		if (!hasNotes || !phrase) return;
-		const svg = serializePhraseSVG(phrase, NOTATION_GEOM);
+		const svg = serializePhraseSVG(phrase, NOTATION_GEOM, chords);
 		const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
 		const link = document.createElement("a");
 		link.href = url;
@@ -51,7 +62,7 @@ export default function App() {
 					<PitchMeter pitch={pitch} />
 				) : phrase ? (
 					hasNotes ? (
-						<NotationCanvas phrase={phrase} />
+						<NotationCanvas phrase={phrase} chords={chords} />
 					) : (
 						<p className="app__empty">
 							No notes caught — try humming a little louder.

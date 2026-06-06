@@ -33,3 +33,81 @@ export function trebleClef(geom: StaffGeometry): SVGElementSpec {
 
 	return { kind: "path", attrs: { d, fill: "none" }, className: "clef" };
 }
+
+/**
+ * A bass (F) clef drawn as one continuous stroke plus the two dots that flank
+ * the F3 line — same hand-scored treatment as the treble clef. The comma-shaped
+ * head curls over the F3 line; the dots sit in the spaces just above and below
+ * it. `geom` is the BASS staff geometry (top line A3), so F3 = `geom.y + ls`.
+ */
+export function bassClef(geom: StaffGeometry): SVGElementSpec[] {
+	const ls = geom.lineSpacing;
+	const f3Y = geom.y + ls; // 4th line up = F3, where the clef is anchored
+	const cx = geom.x + ls * 1.1; // head sits inside the reserved clef gap
+
+	// Local coordinates: origin at the F3 anchor, x → right, y → down, in `ls`.
+	const p = (lx: number, ly: number): string =>
+		`${round(cx + lx * ls)} ${round(f3Y + ly * ls)}`;
+
+	// One pen stroke: a dot-like head on F3, curling up and over to the right,
+	// then sweeping down-left into the comma tail near D3.
+	const d = [
+		`M ${p(-0.2, 0.1)}`, // start on F3, left of the head
+		`C ${p(-0.3, -0.75)} ${p(0.7, -1.15)} ${p(1.15, -0.65)}`, // up and over the top toward A3
+		`C ${p(1.55, -0.3)} ${p(1.45, 0.5)} ${p(1.0, 0.95)}`, // down the right side
+		`C ${p(0.6, 1.35)} ${p(0.0, 1.4)} ${p(-0.5, 1.2)}`, // sweep down-left into the tail near D3
+	].join(" ");
+
+	const dotX = round(cx + ls * 1.75);
+	const dotR = round(ls * 0.17);
+	const dot = (ly: number): SVGElementSpec => ({
+		kind: "ellipse",
+		attrs: {
+			cx: dotX,
+			cy: round(f3Y + ly * ls),
+			rx: dotR,
+			ry: dotR,
+			fill: "currentColor",
+		},
+		className: "clef-dot",
+	});
+
+	return [
+		{ kind: "path", attrs: { d, fill: "none" }, className: "clef" },
+		dot(-0.5), // space above F3 (G3)
+		dot(0.5), // space below F3 (E3)
+	];
+}
+
+/**
+ * The grand-staff brace: a curly bracket on the far left joining the treble and
+ * bass staves. Two mirrored bézier lobes that bulge left and pinch at the
+ * vertical midpoint, spanning the treble top line to the bass bottom line.
+ */
+export function brace(
+	treble: StaffGeometry,
+	bass: StaffGeometry,
+): SVGElementSpec {
+	const ls = treble.lineSpacing;
+	const topY = treble.y;
+	const bottomY = bass.y + (bass.numLines - 1) * ls;
+	const midY = (topY + bottomY) / 2;
+	const x = treble.x - ls * 0.9; // anchor just left of the staff
+	const bulge = ls * 0.9;
+
+	const d = [
+		`M ${round(x)} ${round(topY)}`,
+		// upper lobe: bow out to the left, narrow back in to the cusp at midY
+		`C ${round(x - bulge)} ${round(topY + (midY - topY) * 0.4)} ${round(
+			x - bulge * 0.5,
+		)} ${round(midY - (midY - topY) * 0.25)} ${round(x - bulge * 1.5)} ${round(
+			midY,
+		)}`,
+		// lower lobe: mirror back out and in to the bass bottom line
+		`C ${round(x - bulge * 0.5)} ${round(midY + (bottomY - midY) * 0.25)} ${round(
+			x - bulge,
+		)} ${round(bottomY - (bottomY - midY) * 0.4)} ${round(x)} ${round(bottomY)}`,
+	].join(" ");
+
+	return { kind: "path", attrs: { d, fill: "none" }, className: "brace" };
+}
