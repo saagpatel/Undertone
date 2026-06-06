@@ -444,4 +444,185 @@ Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the h
 
 ---
 
-**Deferred beyond v2:** secondary dominants / borrowed chords, accompaniment style variants (arpeggio, Alberti bass), multi-measure barlines + time-signature engraving, MIDI input, in-app score editing, cloud save. WASM remains out of scope — harmonization is pure TS.
+**Deferred beyond v2 → now scoped as v3 (below):** secondary dominants / borrowed chords, accompaniment style variants (arpeggio, Alberti bass), multi-measure barlines + time-signature engraving, MIDI input, in-app score editing, persistence/sharing. WASM remains out of scope — everything stays pure TS.
+
+---
+
+# v3 — Depth, Input, Editing & Persistence (Phases 7–12)
+
+v2 shipped the whole-composition reveal: hum → key detection → diatonic functional harmony → audible block-triad accompaniment → hand-scored grand staff. v3 deepens the *music* (chromatic color, accompaniment textures, real measure structure), opens a second *input* path (MIDI), makes the score *editable*, and lets you *keep and share* your work — all without betraying the local-only identity.
+
+**Locked v3 decisions** (from the v3 scoping brainstorm, 2026-06-06):
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| "Cloud save" | **Enhanced local persistence** — IndexedDB composition library + file import/export + shareable URL (score serialized in the hash). NO backend. | Solves the real need (don't lose / share my work) client-side. The no-backend, nothing-leaves-the-tab identity stays sacred. |
+| Chromatic harmony | **Opt-in** secondary dominants + borrowed chords, still melody-gated; strict-diatonic remains the default | Adds color without breaking the always-consonant baseline; diatonic output is unchanged when chromatic mode is off. |
+| Accompaniment texture | Selectable **block / arpeggio / Alberti**; block stays the default (v2 parity) | Texture variety without regressing the proven baseline. |
+| Editing model | The SVG renderer stays a **pure one-way function** (`Phrase → SVG`); the interaction layer maps clicks → note index → a **new immutable Phrase** | Keeps the renderer pure and testable; editing is a React-layer concern, never a renderer mutation. |
+| Sequencing | **Lowest-risk-first:** chromatic harmony → accompaniment styles → measures → persistence → MIDI → editing | Editing (highest surface) lands last, on a stable measure model + persistence to save into. |
+
+**Unchanged hard constraints (still in force):** client-side only, zero network requests, no backend, no notation library, no WASM. Persistence and sharing are entirely client-side (IndexedDB + URL hash + local files).
+
+---
+
+## Phase 7: Chromatic Harmony — Secondary Dominants + Borrowed Chords (pure DSP)
+
+**Objective:** Add chromatic color to the harmonizer, opt-in and melody-gated, while the diatonic baseline stays the default and unchanged. Pure DSP, extending the proven Phase 4 engine in isolation.
+
+**Tasks:**
+1. `src/dsp/harmony.ts` — extend the chord search (behind `opts.chromatic`) with **secondary dominants**: for a slot whose target is a diatonic chord, optionally offer the major triad a fifth above that chord's root (V/V, V/vi, V/ii …) when a melody note in the slot supports the chromatic tone.
+   Acceptance: a melody implying F♯ over a G-targeting slot → V/V (D major) is offered; with `chromatic` off, output is identical to v2 (regression).
+2. `src/dsp/harmony.ts` — **borrowed chords** from the parallel mode (♭VII, iv, ♭VI in major) scored by melody-tone coverage; only surfaced when a melody note implies the borrowed chromatic tone.
+   Acceptance: a melody with ♭7̂ over a tonic-area slot → ♭VII offered; never forced when the melody is purely diatonic.
+3. Symbol + voicing — `chordSymbol` labels the new chords (roman `V/V`, symbol `D`; `♭VII` → `B♭`); `voiceChord` already handles arbitrary tones and the Phase 6 bass-staff engraving already renders accidentals.
+   Acceptance: secondary-dominant + borrowed chords engrave with correct accidentals on the grand staff; symbols read correctly.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass; diatonic-mode output unchanged (regression locked by existing harmony tests)
+- [ ] Every chromatic chord is melody-supported — never inserted against a purely diatonic melody
+- [ ] Accidental chord tones engrave correctly on both staves
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Chromatic clash with a diatonic melody: gate strictly on melody-tone support, default off, never force.
+- Symbol/roman ambiguity for applied chords: document the labelling scheme; test each family.
+
+**Phase-end review:** Run `/code-review` (high), inline. Address critical findings before marking the phase complete.
+
+---
+
+## Phase 8: Accompaniment Style Variants (arpeggio / Alberti / block)
+
+**Objective:** Replace the single block-triad texture with selectable patterns — block (current), broken/arpeggio, Alberti bass — affecting both playback scheduling and engraving. Block stays the default for exact v2 parity.
+
+**Tasks:**
+1. `src/dsp/accompaniment.ts` (new, pure) — `patternize(voiced, style, slotBeats): TimedTone[]` mapping a voiced chord to per-tone onsets within the slot (block = all at onset; arpeggio = ascending subdivisions; Alberti = low-high-mid-high). Fully unit-tested.
+   Acceptance: block → one onset per tone at beat 0; arpeggio → ascending onsets spanning the slot; Alberti → the 4-step low-high-mid-high cycle.
+2. Playback — schedule `TimedTone` onsets instead of a single block stack.
+   Acceptance: distinct scheduled onset times per style (assert against the audio scheduler's planned events).
+3. Engraving (`render.ts`) — arpeggio/Alberti render as separate noteheads at their fractional-beat x (reuse `beatToX` with sub-beat positions) and appropriate note values; block unchanged.
+   Acceptance: block style → byte-identical specs to v2 (regression); arpeggio → N noteheads at ascending sub-beat x within the slot.
+4. UI — a style selector (segmented control), default block.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass; block-style render + playback identical to v2
+- [ ] Sub-beat noteheads don't collide horizontally at typical tempos
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Engraving density: arpeggiated chords add glyphs; verify `beatToX` sub-beat spacing avoids overlap.
+- Playback timing drift: schedule onsets off the existing audio clock, not wall-clock.
+
+**Phase-end review:** Run `/code-review` (high), inline.
+
+---
+
+## Phase 9: Measure Structure — Barlines + Time Signature Engraving
+
+**Objective:** Engrave real measure structure — barlines at measure boundaries (spanning both staves on the grand staff), a hand-scored time-signature after the clef. `Phrase` already carries `timeSignatureNumerator/Denominator`.
+
+**Tasks:**
+1. `src/notation/layout.ts` — `measureBoundaries(phrase): number[]` (barline beat positions from the time signature); barline x via the shared `beatToX`.
+   Acceptance: a 2-measure 4/4 phrase → one internal boundary at beat 4.
+2. `src/notation/clef.ts` (or a new glyph module) — `timeSignature(geom, num, den): SVGElementSpec[]` — two stacked hand-scored digits placed after the clef.
+   Acceptance: 4/4 → two "4" glyphs vertically centred on the staff; scales with line spacing.
+3. `src/notation/render.ts` — draw barlines at each boundary (full-height on the grand staff: treble top → bass bottom), a final thin+thick barline at phrase end, and the time signature once after the clef.
+   Acceptance: internal + final barlines present; grand-staff barlines span both staves; notes shift right to clear the time sig.
+4. Reserve horizontal space — extend the shared left-margin in `beatToX` (new `TIME_SIG_GAP`) so notes/chords on **both** staves stay aligned after the time sig is inserted.
+   Acceptance: treble and bass beat columns remain vertically aligned with the time sig present.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass; single-staff (no harmony) still renders barlines + time sig
+- [ ] Both staves stay beat-aligned after the time-sig margin shift (single `beatToX` source)
+- [ ] `pnpm build` → clean; export SVG still valid
+
+**Risks:**
+- The left-margin shift touches the single source of x-truth (`beatToX`) — both staves must move together; lock with an alignment test.
+- Final-barline glyph weight: match the hand-scored stroke treatment.
+
+**Phase-end review:** Run `/code-review` (high), inline.
+
+---
+
+## Phase 10: Local Persistence — Composition Library + File I/O + Shareable Link
+
+**Objective:** Never lose your work; share a composition as a link — entirely client-side. An IndexedDB library of named compositions, JSON file import/export, and a shareable URL with the score serialized in the hash. No backend, zero network.
+
+**Tasks:**
+1. `src/storage/library.ts` (new) — IndexedDB wrapper: save / load / list / rename / delete named compositions (`Phrase` + detected `Key` + harmonization opts). Async, unit-tested with `fake-indexeddb`.
+   Acceptance: save → list → load returns an identical record; delete removes it; survives reload.
+2. Serialization — `encodePhrase(phrase): string` / `decodePhrase(s): Phrase`, compact + URL-safe (packed + base64); round-trip tested. JSON file export/import reuses it.
+   Acceptance: encode→decode round-trips any Phrase exactly; malformed input → typed error, never a silent partial.
+3. Shareable URL — write the encoded phrase to `location.hash`; on cold load with a hash phrase, restore and render it (no mic needed).
+   Acceptance: a share URL opened cold renders the same score; **assert zero network requests** on restore.
+4. UI — library panel (save current / load / rename / delete), "Copy share link", "Import / Export file".
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass (storage + serialization round-trips, fake-indexeddb)
+- [ ] Zero network requests on save, load, or share-restore (the local-only invariant holds)
+- [ ] Graceful fallback when IndexedDB is unavailable (private mode) → in-memory + file export
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- URL length for long phrases: compress (packed binary → base64); cap with a clear warning, fall back to file export.
+- IndexedDB unavailable / quota: feature-detect, degrade to in-memory + file I/O, surface the state.
+
+**Phase-end review:** Run `/code-review` (high), inline.
+
+---
+
+## Phase 11: MIDI Input (Web MIDI API)
+
+**Objective:** A second input modality — play a MIDI keyboard instead of (or alongside) humming — feeding the **same** quantized `Phrase` the mic path produces, so the entire downstream pipeline is reused unchanged.
+
+**Tasks:**
+1. `src/dsp/midi.ts` (new) — Web MIDI capture: subscribe to note-on/note-off, build raw `(pitch, startTime, endTime)` events, convert to the same `NoteEvent` stream the pitch detector emits, then through the existing quantizer.
+   Acceptance: a recorded note sequence → the same `Phrase` shape as the mic path → harmonizes + engraves identically.
+2. UI — input-source toggle (mic / MIDI), device picker when multiple are present, permission + no-device fallbacks.
+   Acceptance: no device or unsupported browser → clear empty state; mic path still fully works.
+3. Reuse — `quantize`, `detectKey`, `harmonize`, render all unchanged; MIDI only replaces the front of the pipeline.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass (MIDI event → NoteEvent conversion + quantizer reuse)
+- [ ] Feature-detected: toggle hidden when Web MIDI is unavailable; mic unaffected
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Browser support / permissions vary: feature-detect `navigator.requestMIDIAccess`, hide the toggle when absent.
+- Timing: MIDI gives exact onsets — quantization is cleaner than pitch detection; reuse the quantizer as-is.
+
+**Phase-end review:** Run `/code-review` (high), inline.
+
+---
+
+## Phase 12: In-App Score Editing
+
+**Objective:** The big one — edit the transcribed score by hand (transpose a note by a diatonic step, change its value, delete / insert) with the accompaniment + grand staff re-deriving live. Depends on the stable measure model (Phase 9) and persistence (Phase 10) to save edits into.
+
+**Tasks:**
+1. Addressable model — map each rendered notehead back to its `NoteEvent` index (the reveal index already carries this; add an explicit data attribute the React layer can hit-test).
+   Acceptance: clicking a notehead resolves to the correct melody-note index.
+2. Edit interactions — select a note; arrow keys / drag to transpose by diatonic step; change note value; delete; insert at a beat. Every edit produces a **new immutable `Phrase`** (the renderer never mutates).
+   Acceptance: drag a notehead up one step → pitch +1 diatonic, re-rendered; keyboard-only editing works (a11y).
+3. Live re-derive — on edit, re-run `detectKey` / `harmonize` / render (debounced) so the accompaniment + grand staff track the change.
+   Acceptance: editing a melody note updates the engraved harmony beneath it.
+4. Undo / redo — a `Phrase` history stack.
+   Acceptance: undo restores the prior Phrase exactly; redo re-applies.
+5. Persist — edited compositions save to the Phase 10 library.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass (Phrase mutations are pure; re-derivation tested)
+- [ ] Renderer stays a pure one-way function — all interaction lives in the React layer
+- [ ] Keyboard-editable + ARIA; edits round-trip through persistence
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Highest-surface phase: the renderer is one-way (`Phrase → SVG`). Keep it pure — put hit-testing/intent in React, mapping clicks → note index → a new `Phrase`. Never make the renderer stateful.
+- Re-harmonization churn on every keystroke: debounce; consider re-harmonizing only the affected slot.
+
+**Phase-end review:** Run `/code-review` (high), inline.
+
+---
+
+**Deferred beyond v3:** real-time collaboration, AI melody continuation/suggestion, a native/mobile app, lyrics, multi-track/multi-voice melodies. A backend remains out of scope — if cloud sync is ever wanted, it is a deliberate v4 identity decision, not an incremental add. WASM remains unneeded — everything is pure TS.

@@ -23,26 +23,28 @@ This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP pl
 Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architecture.
 
 ## Current Phase
-**v2 · Phase 4: Harmonization Engine (pure DSP)** — v1 (Phases 0–3) complete and shipped to GitHub.
-See IMPLEMENTATION-ROADMAP.md (the "v2 — Procedural Harmonization" section) for full phase details.
+**v3 · Phase 7: Chromatic Harmony (pure DSP)** — v1 (Phases 0–3) and v2 (Phases 4–6) complete and shipped to `main`.
+See IMPLEMENTATION-ROADMAP.md (the "v3 — Depth, Input, Editing & Persistence" section) for full phase details.
 
 ## Key Decisions
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Pitch detection | Autocorrelation on `AnalyserNode` time-domain buffer | Zero-dependency, runs on main thread at 60 fps; sufficient for single-voice melody |
-| Notation renderer | Procedural SVG in TypeScript (no library) | Hand-scored aesthetic requires precise control over glyph paths, weight, irregularity |
-| Persistence | None required for v1 (in-memory phrase); optional localStorage export | Local-only constraint; no backend means no sync surface |
-| WASM harmonics | Deferred beyond v2 | v2 harmonization is pure TS (Krumhansl-Schmuckler + diatonic functional); WASM not needed |
-| Accompaniment | v2 active (Phases 4–6) — melody-aware functional harmonization | The v2 reveal is the full composition under your melody; v1 was melody-only |
+| Notation renderer | Procedural SVG in TypeScript (no library), pure one-way `Phrase → SVG` | Hand-scored aesthetic needs precise glyph control; editing (v3) lives in the React layer, never as a renderer mutation |
+| Persistence | v3: client-side only — IndexedDB composition library + file import/export + shareable URL hash | "Cloud save" need solved without a backend; nothing leaves the tab |
+| WASM harmonics | Deferred indefinitely | All harmonization (incl. v3 chromatic) is pure TS; WASM not needed |
+| Accompaniment | v3: selectable block / arpeggio / Alberti; block is the default (v2 parity) | Texture variety without regressing the proven baseline |
+| Harmonic vocabulary | v3: opt-in secondary dominants + borrowed chords, melody-gated; strict-diatonic default | Chromatic color without breaking the always-consonant baseline |
 
 ## Phase-Boundary Review
 At the end of every phase, run `/code-review` (high) before committing the phase-final code (review inline — the auto-team hook blocks reviewer-agent dispatches). Do not skip on phases that feel small.
 
 ## Do NOT
-- Do not add a backend — client-side only, nothing leaves the browser tab.
-- Do not exceed locked v2 scope: strictly-diatonic, melody-aware harmonization only — no secondary dominants / borrowed chords, no accompaniment style variants (arpeggio/Alberti), no MIDI or score editing (all deferred beyond v2).
+- Do not add a backend — client-side only, nothing leaves the browser tab (v3 persistence/sharing is IndexedDB + URL hash + local files only).
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
-- Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md.
+- Do not make the SVG renderer stateful — it stays a pure `Phrase → SVG` function; v3 editing maps interactions → a new immutable `Phrase` in the React layer.
+- Do not add WASM — all DSP, including v3 chromatic harmony, is pure TS.
+- Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md (v3 = Phases 7–12; deferred-beyond-v3 list at the roadmap's end stays out of scope).
 
 <!-- portfolio-context:start -->
 # Portfolio Context
