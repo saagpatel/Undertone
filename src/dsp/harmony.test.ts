@@ -304,3 +304,171 @@ describe("chordSymbol", () => {
 		expect(chordSymbol(tonic, C_MAJOR)).toBe("C");
 	});
 });
+
+// ─── Tests — chromatic harmony (Phase 7) ──────────────────────────────────────
+
+describe("harmonize — chromatic opt-in", () => {
+	// A 3-measure phrase: slot 0 is a FREE slot (chromatic-eligible), slot 1 the
+	// penultimate (forced cadence), slot 2 the last (forced tonic). The first
+	// measure outlines the chromatic chord under test; measures 1-2 land a plain
+	// V→I cadence so only slot 0 can pick up a chromatic colour.
+	function threeMeasures(
+		firstMeasure: Array<
+			[
+				"C" | "D" | "E" | "F" | "G" | "A" | "B",
+				null | "sharp" | "flat",
+				number,
+				number,
+			]
+		>,
+	): Phrase {
+		return makePhrase([
+			...firstMeasure,
+			// Measure 1 (beats 4-7) → dominant G-B-D.
+			["G", null, 4, 4],
+			["B", null, 4, 5],
+			["D", null, 5, 6],
+			["G", null, 4, 7],
+			// Measure 2 (beats 8-11) → tonic, ends on C.
+			["C", null, 5, 8],
+			["E", null, 4, 9],
+			["G", null, 4, 10],
+			["C", null, 4, 11],
+		]);
+	}
+
+	it("default path is byte-identical with chromatic off vs omitted", () => {
+		const phrase = threeMeasures([
+			["D", null, 4, 0],
+			["F", "sharp", 4, 1],
+			["A", null, 4, 2],
+			["D", null, 5, 3],
+		]);
+		const omitted = harmonize(phrase, C_MAJOR);
+		const explicitOff = harmonize(phrase, C_MAJOR, { chromatic: false });
+		expect(explicitOff).toEqual(omitted);
+	});
+
+	it("never inserts a chromatic chord against a purely diatonic melody", () => {
+		// All-diatonic melody — chromatic ON must produce identical output to OFF.
+		const phrase = threeMeasures([
+			["C", null, 4, 0],
+			["E", null, 4, 1],
+			["G", null, 4, 2],
+			["C", null, 5, 3],
+		]);
+		const off = harmonize(phrase, C_MAJOR, { chromatic: false });
+		const on = harmonize(phrase, C_MAJOR, { chromatic: true });
+		expect(on).toEqual(off);
+	});
+
+	it("offers V/V (D major) when a slot's melody implies F♯ in C major", () => {
+		const phrase = threeMeasures([
+			["D", null, 4, 0],
+			["F", "sharp", 4, 1],
+			["A", null, 4, 2],
+			["D", null, 5, 3],
+		]);
+		const off = harmonize(phrase, C_MAJOR, { chromatic: false });
+		const on = harmonize(phrase, C_MAJOR, { chromatic: true });
+
+		// Diatonic mode never emits F♯.
+		for (const chord of off) {
+			for (const tone of chord.tones) {
+				expect(tone.accidental).not.toBe("sharp");
+			}
+		}
+
+		const slot0 = on[0];
+		expect(slot0.roman).toBe("V/V");
+		expect(slot0.symbol).toBe("D");
+		expect(slot0.quality).toBe("major");
+		expect(slot0.tones).toEqual([
+			{ pitch: "D", accidental: null },
+			{ pitch: "F", accidental: "sharp" }, // leading tone spelled sharp, not G♭
+			{ pitch: "A", accidental: null },
+		]);
+	});
+
+	it("offers ♭VII (B♭ major) when a slot's melody implies ♭7̂ in C major", () => {
+		const phrase = threeMeasures([
+			["B", "flat", 4, 0],
+			["D", null, 5, 1],
+			["F", null, 5, 2],
+			["B", "flat", 4, 3],
+		]);
+		const on = harmonize(phrase, C_MAJOR, { chromatic: true });
+		const slot0 = on[0];
+		expect(slot0.roman).toBe("♭VII");
+		expect(slot0.symbol).toBe("Bb");
+		expect(slot0.quality).toBe("major");
+		expect(slot0.tones).toEqual([
+			{ pitch: "B", accidental: "flat" }, // borrowed colour spelled flat, not A♯
+			{ pitch: "D", accidental: null },
+			{ pitch: "F", accidental: null },
+		]);
+	});
+
+	it("offers borrowed iv (F minor) when a slot's melody implies ♭6̂ in C major", () => {
+		const phrase = threeMeasures([
+			["F", null, 4, 0],
+			["A", "flat", 4, 1],
+			["C", null, 5, 2],
+			["F", null, 4, 3],
+		]);
+		const on = harmonize(phrase, C_MAJOR, { chromatic: true });
+		const slot0 = on[0];
+		expect(slot0.roman).toBe("iv");
+		expect(slot0.symbol).toBe("Fm");
+		expect(slot0.quality).toBe("minor");
+		expect(slot0.tones).toEqual([
+			{ pitch: "F", accidental: null },
+			{ pitch: "A", accidental: "flat" },
+			{ pitch: "C", accidental: null },
+		]);
+	});
+
+	it("offers the major V (E major) in A minor when the melody implies the leading tone", () => {
+		const phrase = makePhrase([
+			// Slot 0 outlines E-G♯-B → the harmonic-minor dominant.
+			["E", null, 4, 0],
+			["G", "sharp", 4, 1],
+			["B", null, 4, 2],
+			["E", null, 5, 3],
+			// Penultimate → v area.
+			["E", null, 4, 4],
+			["G", null, 4, 5],
+			["B", null, 4, 6],
+			["E", null, 4, 7],
+			// Last → A-minor tonic.
+			["A", null, 4, 8],
+			["C", null, 5, 9],
+			["E", null, 5, 10],
+			["A", null, 4, 11],
+		]);
+		const on = harmonize(phrase, A_MINOR, { chromatic: true });
+		const slot0 = on[0];
+		expect(slot0.roman).toBe("V");
+		expect(slot0.symbol).toBe("E");
+		expect(slot0.quality).toBe("major");
+		expect(slot0.tones).toEqual([
+			{ pitch: "E", accidental: null },
+			{ pitch: "G", accidental: "sharp" },
+			{ pitch: "B", accidental: null },
+		]);
+	});
+
+	it("keeps the forced cadence diatonic even with chromatic enabled", () => {
+		const phrase = threeMeasures([
+			["D", null, 4, 0],
+			["F", "sharp", 4, 1],
+			["A", null, 4, 2],
+			["D", null, 5, 3],
+		]);
+		const on = harmonize(phrase, C_MAJOR, { chromatic: true });
+		const last = on[on.length - 1];
+		const penultimate = on[on.length - 2];
+		expect(last.degree).toBe(1); // tonic
+		expect([4, 5]).toContain(penultimate.degree); // IV or V — never chromatic
+	});
+});

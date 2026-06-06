@@ -132,24 +132,48 @@ interface ScaleDegree {
 const LETTERS: readonly NoteName[] = ["C", "D", "E", "F", "G", "A", "B"];
 
 /**
+ * Spell a given natural letter onto a target pitch class with the single
+ * accidental that bends it there (or a natural when it already lands). For the
+ * double-accidental case — unreachable within our single-accidental key
+ * vocabulary — it falls back to the sharp enharmonic spelling.
+ */
+function spellLetter(letterIdx: number, targetPc: number): ChordTone {
+	const pitch = LETTERS[((letterIdx % 7) + 7) % 7];
+	const diff = (((targetPc - NATURAL_SEMITONES[pitch]) % 12) + 12) % 12;
+	if (diff === 0) return { pitch, accidental: null };
+	if (diff === 1) return { pitch, accidental: "sharp" };
+	if (diff === 11) return { pitch, accidental: "flat" };
+	return pcToSpelling(targetPc); // would need a double accidental — fall back
+}
+
+/**
  * Spell a diatonic scale degree by letter: the Nth degree always uses the Nth
  * letter up from the tonic letter (so C-major degree 3 is some kind of E, never
- * an enharmonic D#). The accidental is whatever bends that natural letter onto
- * the target pitch class. Guarantees correct enharmonic spelling for every key
- * within the single-accidental vocabulary; for the (unreachable, given our tonic
- * spellings) double-accidental case it falls back to the sharp enharmonic.
+ * an enharmonic D#). Guarantees correct enharmonic spelling for every key within
+ * the single-accidental vocabulary.
  */
 function spellDiatonic(
 	tonicLetterIdx: number,
 	degreeIdx: number,
 	targetPc: number,
 ): ChordTone {
-	const pitch = LETTERS[(tonicLetterIdx + degreeIdx) % 7];
-	const diff = (((targetPc - NATURAL_SEMITONES[pitch]) % 12) + 12) % 12;
-	if (diff === 0) return { pitch, accidental: null };
-	if (diff === 1) return { pitch, accidental: "sharp" };
-	if (diff === 11) return { pitch, accidental: "flat" };
-	return pcToSpelling(targetPc); // would need a double accidental — fall back
+	return spellLetter(tonicLetterIdx + degreeIdx, targetPc);
+}
+
+/**
+ * Spell a root-position triad from a root letter and pitch class. Each tone
+ * stacks a scale third — so the letters skip one each (root, +2, +4) and the
+ * chosen `intervals` (semitone offsets above the root) bend them onto the right
+ * pitch classes. Used for chromatic chords whose roots fall outside the home key.
+ */
+function spellTriad(
+	rootLetterIdx: number,
+	rootPc: number,
+	intervals: readonly [number, number, number],
+): ChordTone[] {
+	return intervals.map((semitone, k) =>
+		spellLetter(rootLetterIdx + 2 * k, (rootPc + semitone) % 12),
+	);
 }
 
 /** Build all 7 diatonic scale degrees for a given key. */
@@ -287,7 +311,125 @@ function scoreChord(
 	return coverage(scale, melodyPCs) + functionalBias(mode, scale.degree - 1);
 }
 
+// ─── Chromatic harmony (opt-in) ───────────────────────────────────────────────
+
+/**
+ * A candidate chromatic chord — secondary dominant or borrowed — shaped like a
+ * {@link ScaleDegree} so it flows through {@link makeChord} unchanged, plus the
+ * pitch classes that lie OUTSIDE the home key. A candidate is only ever offered
+ * for a slot whose melody contains one of those chromatic tones (the gate that
+ * keeps chromatic colour off purely-diatonic melodies).
+ */
+interface ChromaticCandidate extends ScaleDegree {
+	chromaticPCs: number[];
+}
+
+/**
+ * Borrowed chords drawn from the PARALLEL mode (same tonic, opposite mode), by
+ * the parallel scale's degree index, with the conventional roman relabel.
+ * Major borrows the minor colours (iv, ♭VI, ♭VII); minor borrows the major IV
+ * (the raised-6̂ subdominant). Each is still gated on melody support, so it only
+ * surfaces when the melody actually implies its chromatic tone.
+ */
+const BORROWED_DEGREES: Record<
+	Mode,
+	ReadonlyArray<{ parallelDegree: number; roman: string }>
+> = {
+	major: [
+		{ parallelDegree: 4, roman: "iv" }, // minor iv (♭6̂)
+		{ parallelDegree: 6, roman: "♭VI" }, // ♭VI
+		{ parallelDegree: 7, roman: "♭VII" }, // ♭VII (♭7̂)
+	],
+	// Minor needs no separate borrowed list: its chromatic palette is fully
+	// covered by the secondary-dominant generator (the major V over the tonic
+	// plus applied dominants like V/VII), which already emits the same triads a
+	// parallel-major borrowing would — and earlier, so a borrowed entry here
+	// would only ever be a shadowed, never-selected duplicate.
+	minor: [],
+};
+
+/**
+ * Small functional bonus for a melody-supported chromatic chord — enough to let
+ * a well-covered applied/borrowed chord edge out a weak diatonic option, but not
+ * so much that it overrides the melody. Sits between the weak (0.0) and
+ * pre-dominant (0.1) diatonic biases.
+ */
+const CHROMATIC_BIAS = 0.1;
+
+/** Pitch class of a {@link ChordTone}. */
+function tonePC(t: ChordTone): number {
+	return toPitchClass(t.pitch, t.accidental);
+}
+
+/**
+ * Build every chromatic candidate for a key: secondary dominants (the major
+ * triad a perfect fifth above each non-diminished diatonic root) plus parallel
+ * mode borrowed chords. Candidates whose tones are all diatonic (e.g. V/I, V/IV
+ * in major) are dropped — the chromatic-tone filter does that for free, which is
+ * also what surfaces the major V (harmonic-minor dominant) in a minor key.
+ */
+function buildChromaticChords(
+	scale: ScaleDegree[],
+	key: Key,
+): ChromaticCandidate[] {
+	const diatonicPCs = new Set(scale.map((sd) => tonePC(sd.root)));
+	const tonicLetterIdx = LETTERS.indexOf(key.tonic);
+	const candidates: ChromaticCandidate[] = [];
+
+	// Secondary dominants — tonicize each major/minor diatonic degree.
+	for (const target of scale) {
+		if (target.quality === "dim") continue; // diminished triads aren't tonicized
+		const targetRootPc = tonePC(target.root);
+		const domRootPc = (targetRootPc + 7) % 12; // a perfect fifth above
+		const domRootLetterIdx = (LETTERS.indexOf(target.root.pitch) + 4) % 7;
+		const tones = spellTriad(domRootLetterIdx, domRootPc, [0, 4, 7]); // major
+		const chromaticPCs = tones.map(tonePC).filter((pc) => !diatonicPCs.has(pc));
+		if (chromaticPCs.length === 0) continue; // dominant is diatonic — skip
+		candidates.push({
+			degree: ((domRootLetterIdx - tonicLetterIdx + 7) % 7) + 1,
+			// Tonicizing the tonic IS the primary dominant (major V in minor) — "V";
+			// every other target is an applied dominant "V/x".
+			roman: target.degree === 1 ? "V" : `V/${target.roman}`,
+			quality: "major",
+			tones,
+			root: tones[0],
+			chromaticPCs,
+		});
+	}
+
+	// Borrowed chords — pull spelled triads straight from the parallel scale.
+	const parallelMode: Mode = key.mode === "major" ? "minor" : "major";
+	const parallelScale = buildScale({ ...key, mode: parallelMode });
+	for (const spec of BORROWED_DEGREES[key.mode]) {
+		const sd = parallelScale[spec.parallelDegree - 1];
+		const chromaticPCs = sd.tones
+			.map(tonePC)
+			.filter((pc) => !diatonicPCs.has(pc));
+		if (chromaticPCs.length === 0) continue; // already diatonic — not borrowed
+		candidates.push({
+			degree: sd.degree,
+			roman: spec.roman,
+			quality: sd.quality,
+			tones: sd.tones,
+			root: sd.root,
+			chromaticPCs,
+		});
+	}
+
+	return candidates;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+/** Options controlling {@link harmonize}. */
+export interface HarmonizeOptions {
+	/**
+	 * Opt into chromatic harmony — secondary dominants + borrowed chords, each
+	 * offered only where a melody note supports the chromatic tone. Default
+	 * `false`: strict diatonic, byte-identical to the v2 output.
+	 */
+	chromatic?: boolean;
+}
 
 /**
  * Harmonize a {@link Phrase} given its detected {@link Key}.
@@ -295,12 +437,23 @@ function scoreChord(
  * Returns an empty array for an empty phrase.
  * Always ends with a tonic chord (I/i) preceded by a dominant/subdominant
  * (authentic or plagal cadence).
+ *
+ * With `opts.chromatic`, free (non-cadence) slots may also pick a melody-gated
+ * secondary dominant or borrowed chord; the forced cadence stays diatonic, and
+ * a purely diatonic melody yields output identical to the default path.
  */
-export function harmonize(phrase: Phrase, key: Key): Chord[] {
+export function harmonize(
+	phrase: Phrase,
+	key: Key,
+	opts?: HarmonizeOptions,
+): Chord[] {
 	if (phrase.notes.length === 0) return [];
 
 	const scale = buildScale(key);
 	const slots = buildSlots(phrase);
+	const chromaticChords = opts?.chromatic
+		? buildChromaticChords(scale, key)
+		: [];
 
 	const tonicDegree = scale[0]; // I or i
 	const dominantDegree = scale[4]; // V or v
@@ -342,7 +495,7 @@ export function harmonize(phrase: Phrase, key: Key): Chord[] {
 		}
 
 		// Free slot → highest-scoring diatonic chord (coverage + functional bias).
-		let bestScale = scale[0];
+		let bestScale: ScaleDegree = scale[0];
 		let bestScore = -Infinity;
 		for (const sd of scale) {
 			const score = scoreChord(sd, melodyPCs, key.mode);
@@ -351,6 +504,20 @@ export function harmonize(phrase: Phrase, key: Key): Chord[] {
 				bestScale = sd;
 			}
 		}
+
+		// …then let any melody-supported chromatic chord compete. A candidate is
+		// eligible only when the melody here contains one of its chromatic tones,
+		// so chromatic colour never appears against a purely diatonic melody. The
+		// strict `>` keeps diatonic the tie-winner — default output is unchanged.
+		for (const cand of chromaticChords) {
+			if (!cand.chromaticPCs.some((pc) => melodyPCs.has(pc))) continue;
+			const score = coverage(cand, melodyPCs) + CHROMATIC_BIAS;
+			if (score > bestScore) {
+				bestScore = score;
+				bestScale = cand;
+			}
+		}
+
 		result.push(makeChord(bestScale, slot, key));
 	}
 
