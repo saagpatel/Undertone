@@ -312,3 +312,136 @@ pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
 - Dispatch via: `claude agents` (v2.1.139+).
 
 **Phase-end review:** Run `/ultrareview`. Address all findings before marking the phase complete.
+
+---
+
+# v2 — Procedural Harmonization (Phases 4–6)
+
+v1 (Phases 0–3) is complete: hum → quantized melody → hand-scored notation → reveal + playback + export. v2 makes the reveal a **whole composition** — a procedurally-generated accompaniment that fits the melody you actually hummed, heard and seen alongside it.
+
+**Locked v2 decisions** (from the v2 scoping brainstorm, 2026-06-06):
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Harmonization | **Melody-aware functional** — per-slot diatonic chord from the melody's own notes + functional flow + cadence | The harmony reflects *your* melody — that is the reveal. A canned progression is karaoke. |
+| Key detection | Krumhansl-Schmuckler profile correlation | Classic, deterministic, zero-dependency, fully unit-testable. |
+| Notation phasing | **Chord symbols first (Phase 5), grand staff next (Phase 6)** | Prove the music before the engraving — if the harmony sounds wrong, find out cheap. |
+| Accompaniment texture | Block triad + bass root (v2 baseline); arpeggio/style variants deferred | Simplest musical voicing; notation and playback both straightforward. |
+| Harmonic vocabulary | Strictly diatonic (no secondary dominants / borrowed chords in v2) | Always-consonant baseline; chromatic color is a later enhancement. |
+
+**Unchanged hard constraints:** client-side only, zero network requests, no backend, no notation library, no WASM (the v1 deferral of WASM harmonics still holds — harmonization is pure TS).
+
+### New type definitions
+
+```typescript
+// src/dsp/key.ts
+export type Mode = 'major' | 'minor';
+export interface Key {
+  tonic: NoteName;
+  accidental: Accidental;   // sharp/flat tonic spelling, else null
+  mode: Mode;
+}
+
+// src/dsp/harmony.ts
+export interface ChordTone { pitch: NoteName; accidental: Accidental; }
+export interface Chord {
+  roman: string;            // 'I' | 'ii' | 'IV' | 'V' | 'vi' | 'vii°' (+ minor-mode variants)
+  degree: number;           // scale degree 1..7 of the chord root
+  root: ChordTone;
+  tones: ChordTone[];       // triad pitch classes, root-position
+  symbol: string;           // chord-symbol label, e.g. 'C', 'Am', 'G'
+  beatPosition: number;     // quarter-note units from phrase start
+  beats: number;            // duration in beats (the harmonic rhythm slot)
+}
+```
+
+Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the harmonization layer never mutates the melody.
+
+---
+
+## Phase 4: Harmonization Engine (pure DSP)
+
+**Objective:** The brain. `detectKey` infers the melody's key; `harmonize` produces a diatonic `Chord[]` chosen from the melody's own notes with functional voice-leading and a closing cadence. No UI — this is the load-bearing primitive, proven in isolation exactly as `detectPitch` was in Phase 0. All pure, all unit-tested.
+
+**Tasks:**
+1. `src/dsp/key.ts` — `detectKey(phrase): Key` via Krumhansl-Schmuckler: build a 12-bin pitch-class histogram weighted by each note's duration (beats), correlate against the 24 rotated major/minor key profiles, return the best fit.
+   Acceptance: `pnpm test src/dsp/key.test.ts` → a C-major melody (C D E F G A B) → `{ tonic: 'C', mode: 'major' }`; an A-minor melody → `{ tonic: 'A', mode: 'minor' }`; a single-note phrase → a sane key with that note diatonic.
+2. `src/dsp/harmony.ts` — `harmonize(phrase, key, opts?): Chord[]`: slice the phrase into harmonic-rhythm slots (default one chord per measure, with a per-beat fallback for sparse/long notes); for each slot pick the diatonic triad scoring highest on melody-tone coverage, biased toward functional motion (I/IV/V anchors, vi/ii pre-dominants) and forced to a cadence (V→I or IV→I) on the final slot.
+   Acceptance: `pnpm test src/dsp/harmony.test.ts` → fixture melody in C → first chord contains the tonic when the melody opens on a chord tone; final two chords form an authentic/plagal cadence; every chord is diatonic to the detected key.
+3. Chord-symbol formatting in `harmony.ts` — `chordSymbol(chord, key): string` (e.g. `C`, `Dm`, `G`, `Am`); minor-mode and quality suffixes correct.
+   Acceptance: I in C → `C`; vi in C → `Am`; V in A-minor → `E` (or `Em` per mode handling, documented).
+
+**Verification checklist:**
+- [ ] `pnpm test src/dsp/key.test.ts src/dsp/harmony.test.ts` → all pass
+- [ ] Detected key is stable across octave shifts of the same melody
+- [ ] Every emitted chord is diatonic to the detected key (no accidental leaks)
+- [ ] Final cadence present on every non-empty phrase; empty phrase → `[]`
+- [ ] `pnpm build` → no TypeScript errors
+
+**Risks:**
+- Key ambiguity on short/atonal hums: K-S still returns a best fit; document that 1–2 note phrases are low-confidence and harmonize conservatively (tonic pedal).
+- Melody note outside the chord (passing tone): score by coverage, don't require full containment; never force a non-diatonic chord.
+
+**Phase-end review:** Run `/code-review` (high), inline. Address critical findings before marking the phase complete.
+
+---
+
+## Phase 5: Audible Accompaniment + Chord Symbols
+
+**Objective:** Make the harmony heard and labelled. Extend playback to voice the chords under the melody; print chord symbols above the staff. After this phase: hum → hear melody **and** accompaniment → see the chord changes. The musical engine is validated before any second-staff engraving.
+
+**Tasks:**
+1. Extend `usePlayback` (and the pure `dsp/playback.ts` schedule) to also schedule accompaniment voices per `Chord` — block triad + bass root — on the **same** `AudioContext.currentTime` base as the melody (no drift), at lower gain and a softer timbre (e.g. `triangle`) so the melody stays foreground. Clean combined stop.
+   Acceptance: `pnpm test src/dsp/playback.test.ts` → schedule includes accompaniment entries at each chord's `beatPosition` with correct chord-tone frequencies and durations; melody + accompaniment share one time base.
+2. Chord-symbol layer in the notation — render `Chord.symbol` strings above the staff at each chord's x-position (reuse `notePosition`/beat-to-x mapping). New `SVGElementSpec` text elements, class `chord-symbol`.
+   Acceptance: `pnpm test src/notation/render.test.ts` → harmonized fixture → one chord-symbol spec per chord at the expected x; symbols absent when no harmony supplied (v1 render unchanged).
+3. Wire `App.tsx`: on capture, `const key = detectKey(phrase); const chords = harmonize(phrase, key);` thread `chords` into `<NotationCanvas>` and `usePlayback`. Export includes chord symbols.
+   Acceptance: hum → chord symbols appear above the notation; Play sounds melody + accompaniment; exported SVG contains the symbols.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass (no v1 regressions; v1 render identical when `chords` is undefined)
+- [ ] Play reproduces melody + accompaniment; accompaniment sits under the melody, no clipping, clean stop
+- [ ] Chord symbols align horizontally with the notes/beats they govern
+- [ ] Exported SVG still valid XML and now shows chord symbols
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Accompaniment masking the melody: keep accompaniment gain well below melody; verify by ear (operator gate).
+- Symbol collision with high notes/ledger lines: place symbols on a reserved band above the staff with its own vertical offset.
+
+**Phase-end review:** Run `/code-review` (high), inline. Address critical findings before marking the phase complete.
+
+---
+
+## Phase 6: Grand Staff Engraving (the visual reveal)
+
+**Objective:** See the composition, not just hear it. Add a bass-clef staff below the treble, joined by a brace, and engrave the accompaniment there — bass line + stacked chord noteheads aligned to the melody's beats. The reveal animation extends to the lower staff.
+
+**Tasks:**
+1. `src/notation/clef.ts` — add `bassClef(geom)`: a drawn bass (F) clef path (the two dots straddling the F3 line), same hand-scored stroke treatment as the treble.
+   Acceptance: `pnpm test src/notation/clef.test.ts` → returns a single path spec, finite coordinates, scales with line spacing.
+2. Grand-staff geometry — extend `staffGeometry`/layout to a two-staff system (treble + bass, standard gap) with a left brace spanning both; bass-staff y-mapping (`notePositionBass`) for F-clef.
+   Acceptance: `pnpm test src/notation/layout.test.ts` → bass-clef reference pitches land on correct lines (F3 = 4th line up, middle C = ledger above bass staff).
+3. Accompaniment engraving in `render.ts` — for each `Chord`, draw a bass-clef bass note (root) and the triad as stacked noteheads, vertically aligned to the chord's beat x-position; stems per voice convention.
+   Acceptance: `pnpm test src/notation/render.test.ts` → harmonized fixture → bass staff present, one chord stack per chord at the correct x with correct chord-tone y-positions.
+4. Reveal animation extends to the bass staff — the lower system fades/draws in with the upper (frame) and per-chord stagger; `prefers-reduced-motion` honoured. Chord symbols from Phase 5 remain (or fold into the engraving).
+   Acceptance: capture → both staves ink in; re-triggers per capture; export renders the full grand staff as valid standalone SVG.
+
+**Verification checklist:**
+- [ ] `pnpm test` → all pass (v1 single-staff path still works when no harmony)
+- [ ] Grand staff renders: treble + bass + brace, vertically aligned by beat
+- [ ] Bass clef reads as hand-scored (operator visual gate)
+- [ ] Reveal animation covers both staves; reduced-motion shows final state
+- [ ] Exported SVG (full score) valid XML, opens standalone
+- [ ] `pnpm build` → clean
+
+**Risks:**
+- Vertical alignment drift between staves: derive both staves' x from one shared beat-to-x function — single source of truth.
+- Viewport height growth: recompute `VIEW_H` for the two-staff system; keep `NOTATION_GEOM` the shared source for canvas + export.
+- Bass clef path complexity: same fallback discipline as the treble clef — author, render, screenshot, tune.
+
+**Phase-end review:** Run `/code-review` (high), inline. Address critical findings before marking the phase complete.
+
+---
+
+**Deferred beyond v2:** secondary dominants / borrowed chords, accompaniment style variants (arpeggio, Alberti bass), multi-measure barlines + time-signature engraving, MIDI input, in-app score editing, cloud save. WASM remains out of scope — harmonization is pure TS.

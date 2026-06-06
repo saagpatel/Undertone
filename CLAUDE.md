@@ -23,8 +23,8 @@ This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP pl
 Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architecture.
 
 ## Current Phase
-**Phase 0: Scaffold + Web Audio + Real-Time Pitch Detection**
-See IMPLEMENTATION-ROADMAP.md for full phase details.
+**v2 · Phase 4: Harmonization Engine (pure DSP)** — v1 (Phases 0–3) complete and shipped to GitHub.
+See IMPLEMENTATION-ROADMAP.md (the "v2 — Procedural Harmonization" section) for full phase details.
 
 ## Key Decisions
 | Decision | Choice | Why |
@@ -32,15 +32,15 @@ See IMPLEMENTATION-ROADMAP.md for full phase details.
 | Pitch detection | Autocorrelation on `AnalyserNode` time-domain buffer | Zero-dependency, runs on main thread at 60 fps; sufficient for single-voice melody |
 | Notation renderer | Procedural SVG in TypeScript (no library) | Hand-scored aesthetic requires precise control over glyph paths, weight, irregularity |
 | Persistence | None required for v1 (in-memory phrase); optional localStorage export | Local-only constraint; no backend means no sync surface |
-| WASM harmonics | Deferred to v2 | v1 melody rendering is the value; WASM adds complexity for harmonization not in scope |
-| Accompaniment | Deferred to v2 | v1 renders the melody you hummed only — the "reveal" is delivered by styling + animation |
+| WASM harmonics | Deferred beyond v2 | v2 harmonization is pure TS (Krumhansl-Schmuckler + diatonic functional); WASM not needed |
+| Accompaniment | v2 active (Phases 4–6) — melody-aware functional harmonization | The v2 reveal is the full composition under your melody; v1 was melody-only |
 
 ## Phase-Boundary Review
-At the end of every phase, run `/ultrareview` before committing the phase-final code. Do not skip on phases that feel small.
+At the end of every phase, run `/code-review` (high) before committing the phase-final code (review inline — the auto-team hook blocks reviewer-agent dispatches). Do not skip on phases that feel small.
 
 ## Do NOT
 - Do not add a backend — client-side only, nothing leaves the browser tab.
-- Do not build v2 procedural harmonization or accompaniment in v1 — melody-only is the locked scope.
+- Do not exceed locked v2 scope: strictly-diatonic, melody-aware harmonization only — no secondary dominants / borrowed chords, no accompaniment style variants (arpeggio/Alberti), no MIDI or score editing (all deferred beyond v2).
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
 - Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md.
 
