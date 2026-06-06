@@ -226,6 +226,50 @@ body {
 	outline-offset: 3px;
 }
 
+/* Accompaniment-texture picker: a pill-shaped segmented control. The selected
+   segment is the one place the accent ink lands. */
+.style-selector {
+	display: inline-flex;
+	border: 1px solid var(--ink-soft);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.style-selector__option {
+	appearance: none;
+	min-height: 36px;
+	padding: 0 16px;
+	border: none;
+	border-left: 1px solid var(--ink-soft);
+	background: transparent;
+	color: var(--ink-soft);
+	font-family: var(--font-display);
+	font-size: 0.9375rem;
+	cursor: pointer;
+	transition:
+		background 160ms ease,
+		color 160ms ease;
+}
+
+.style-selector__option:first-child {
+	border-left: none;
+}
+
+.style-selector__option:hover:not(.is-selected) {
+	background: var(--paper-shade);
+	color: var(--ink);
+}
+
+.style-selector__option.is-selected {
+	background: var(--accent);
+	color: var(--paper);
+}
+
+.style-selector__option:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: -3px;
+}
+
 .app__hint {
 	margin: 0;
 	font-family: var(--font-mono);

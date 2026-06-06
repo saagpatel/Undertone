@@ -223,3 +223,54 @@ describe("buildAccompanimentSchedule — two chords", () => {
 		}
 	});
 });
+
+describe("buildAccompanimentSchedule — style variants", () => {
+	const BPM = 120;
+	const spb = 60 / BPM; // 0.5 s/beat
+	const chord = makeCMajorChord(0, 4);
+
+	it("explicit block style is identical to the default", () => {
+		expect(buildAccompanimentSchedule([chord], BPM, "block")).toEqual(
+			buildAccompanimentSchedule([chord], BPM),
+		);
+	});
+
+	it("arpeggio spreads the four voices across ascending onsets", () => {
+		const schedule = buildAccompanimentSchedule([chord], BPM, "arpeggio");
+		expect(schedule).toHaveLength(4);
+		// One voice per beat of the 4-beat slot, each a single beat long.
+		expect(schedule.map((n) => n.startSec)).toEqual([
+			0 * spb,
+			1 * spb,
+			2 * spb,
+			3 * spb,
+		]);
+		for (const note of schedule) {
+			expect(note.durationSec).toBeCloseTo(spb, 6);
+		}
+		// Pitch rises monotonically across the run.
+		for (let i = 1; i < schedule.length; i++) {
+			expect(schedule[i].frequency).toBeGreaterThan(schedule[i - 1].frequency);
+		}
+	});
+
+	it("alberti plays the low-high-mid-high cycle", () => {
+		const schedule = buildAccompanimentSchedule([chord], BPM, "alberti");
+		expect(schedule.map((n) => n.startSec)).toEqual([
+			0 * spb,
+			1 * spb,
+			2 * spb,
+			3 * spb,
+		]);
+		const [low, high1, mid, high2] = schedule.map((n) => n.frequency);
+		expect(low).toBeLessThan(mid); // bass below the inner voice
+		expect(high1).toBeGreaterThan(mid); // fifth above the third
+		expect(high2).toBeCloseTo(high1, 6); // steps 2 and 4 are the same voice
+	});
+
+	it("onsets stay on the shared 60/bpm time base", () => {
+		const arp = buildAccompanimentSchedule([chord], BPM, "arpeggio");
+		// Third voice lands at beat 2 — same math buildSchedule would use.
+		expect(arp[2].startSec).toBeCloseTo(2 * spb, 6);
+	});
+});

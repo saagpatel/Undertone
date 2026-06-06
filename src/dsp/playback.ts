@@ -1,3 +1,4 @@
+import { type AccompanimentStyle, patternize } from "./accompaniment";
 import type { Chord } from "./harmony";
 import { NOTE_VALUE_BEATS, noteFrequency, type Phrase } from "./quantize";
 import { voiceChord } from "./voicing";
@@ -39,9 +40,10 @@ export function scheduleDuration(schedule: ScheduledNote[]): number {
  * Build an accompaniment schedule from a chord progression.
  *
  * Each chord is voiced via {@link voiceChord} (bass at octave 2, triad at
- * octave 3) and mapped to four {@link ScheduledNote} entries — one bass note
- * plus three triad tones — all sharing the chord's start time and full
- * duration.  The same 60/bpm beat-to-second conversion is used here as in
+ * octave 3) and spread across its slot by {@link patternize} according to
+ * `style`. `block` (the default) strikes all four voices together for the full
+ * slot — byte-identical to the v2 schedule; the broken styles offset each voice
+ * within the slot. The same 60/bpm beat-to-second conversion is used here as in
  * {@link buildSchedule}, so melody and accompaniment share one time base with
  * zero drift.
  *
@@ -50,19 +52,24 @@ export function scheduleDuration(schedule: ScheduledNote[]): number {
 export function buildAccompanimentSchedule(
 	chords: Chord[],
 	bpm: number,
+	style: AccompanimentStyle = "block",
 ): ScheduledNote[] {
 	if (chords.length === 0) return [];
 	const secondsPerBeat = 60 / bpm;
 	const notes: ScheduledNote[] = [];
 
 	for (const chord of chords) {
-		const startSec = chord.beatPosition * secondsPerBeat;
-		const durationSec = chord.beats * secondsPerBeat;
-		const { bass, triad } = voiceChord(chord);
-
-		notes.push({ frequency: noteFrequency(bass), startSec, durationSec });
-		for (const tone of triad) {
-			notes.push({ frequency: noteFrequency(tone), startSec, durationSec });
+		const voiced = voiceChord(chord);
+		for (const { tone, beatOffset, beats } of patternize(
+			voiced,
+			style,
+			chord.beats,
+		)) {
+			notes.push({
+				frequency: noteFrequency(tone),
+				startSec: (chord.beatPosition + beatOffset) * secondsPerBeat,
+				durationSec: beats * secondsPerBeat,
+			});
 		}
 	}
 

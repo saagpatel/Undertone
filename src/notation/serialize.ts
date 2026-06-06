@@ -1,3 +1,4 @@
+import type { AccompanimentStyle } from "../dsp/accompaniment";
 import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { notationHeight } from "./layout";
@@ -99,10 +100,11 @@ export function serializePhraseSVG(
 	phrase: Phrase,
 	geom: StaffGeometry,
 	chords?: Chord[],
+	style: AccompanimentStyle = "block",
 ): string {
 	const viewW = geom.x * 2 + geom.width;
 	const viewH = notationHeight(geom, isHarmonized(chords));
-	const elements = phraseToSVG(phrase, geom, chords)
+	const elements = phraseToSVG(phrase, geom, chords, style)
 		.map(serializeElement)
 		.join("");
 
