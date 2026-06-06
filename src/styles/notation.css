@@ -54,12 +54,28 @@
 	fill: none;
 }
 
+/* Bass-clef dots (Phase 6) are filled blobs, not strokes. */
+.notation .clef-dot {
+	fill: var(--ink);
+}
+
+/* The grand-staff brace (Phase 6) joining the treble and bass staves. */
+.notation .brace {
+	stroke: var(--ink);
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+}
+
 /* --- Phase 3 reveal: the notation inks itself in over ~1s ---
    The staff + clef fade in as a unit; each note's strokes then draw on, and its
    notehead blooms, staggered via an inline animation-delay set per element in
    <NotationCanvas>. `both` fill-mode holds each glyph hidden until its turn. */
 .notation__ink--animate .staff-line,
-.notation__ink--animate .clef {
+.notation__ink--animate .clef,
+.notation__ink--animate .clef-dot,
+.notation__ink--animate .brace {
 	animation: ut-fade 420ms ease-out both;
 }
 
@@ -104,6 +120,8 @@
 @media (prefers-reduced-motion: reduce) {
 	.notation__ink--animate .staff-line,
 	.notation__ink--animate .clef,
+	.notation__ink--animate .clef-dot,
+	.notation__ink--animate .brace,
 	.notation__ink--animate .notehead,
 	.notation__ink--animate .stem,
 	.notation__ink--animate .beam,

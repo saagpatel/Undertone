@@ -1,7 +1,7 @@
 import { type CSSProperties, createElement } from "react";
 import type { Chord } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
-import { staffGeometry } from "../notation/layout";
+import { notationHeight, staffGeometry } from "../notation/layout";
 import { phraseToSVG } from "../notation/render";
 import type { RevealRole, SVGElementSpec } from "../notation/types";
 import "../styles/notation.css";
@@ -14,9 +14,6 @@ export const NOTATION_GEOM = staffGeometry({
 	lineSpacing: 13,
 });
 const VIEW_W = NOTATION_GEOM.x * 2 + NOTATION_GEOM.width;
-const VIEW_H =
-	NOTATION_GEOM.y * 2 +
-	(NOTATION_GEOM.numLines - 1) * NOTATION_GEOM.lineSpacing;
 
 // Reveal timing. The frame fades first; notes then stagger in so the last one
 // begins drawing around LAST_NOTE_START_MS, landing the whole reveal near 1 s.
@@ -56,6 +53,11 @@ export function NotationCanvas({
 	animate?: boolean;
 }) {
 	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords);
+	// The viewBox grows to the bass staff only when there's harmony to engrave.
+	const viewH = notationHeight(
+		NOTATION_GEOM,
+		Boolean(chords && chords.length > 0),
+	);
 	const count = phrase.notes.length;
 	const step =
 		count > 1 ? (LAST_NOTE_START_MS - FRAME_LEAD_MS) / (count - 1) : 0;
@@ -74,7 +76,7 @@ export function NotationCanvas({
 	return (
 		<svg
 			className="notation"
-			viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+			viewBox={`0 0 ${VIEW_W} ${viewH}`}
 			preserveAspectRatio="xMidYMid meet"
 			role="img"
 			aria-label="Your hummed melody, rendered as sheet music"
