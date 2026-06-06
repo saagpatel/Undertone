@@ -72,15 +72,15 @@ export function NotationCanvas({
 			aria-label="Your hummed melody, rendered as sheet music"
 		>
 			<defs>
-				<filter id="undertone-ink" x="-5%" y="-5%" width="110%" height="110%">
+				<filter id="undertone-ink" x="-8%" y="-8%" width="116%" height="116%">
 					<feTurbulence
 						type="fractalNoise"
-						baseFrequency="0.012"
+						baseFrequency="0.014"
 						numOctaves="2"
 						seed="7"
 						result="noise"
 					/>
-					<feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" />
+					<feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" />
 				</filter>
 			</defs>
 			<g

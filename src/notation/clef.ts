@@ -22,9 +22,9 @@ export function trebleClef(geom: StaffGeometry): SVGElementSpec {
 
 	const d = [
 		`M ${p(0.1, -3.05)}`, // top terminal, above the staff
-		`C ${p(0.85, -3.15)} ${p(1.05, -2.05)} ${p(0.18, -1.6)}`, // upper loop, back toward center
-		`C ${p(-0.85, -1.15)} ${p(-1.0, 0.45)} ${p(0.1, 0.7)}`, // big belly sweeping down-left
-		`C ${p(1.0, 0.92)} ${p(0.98, -0.3)} ${p(0.08, -0.42)}`, // up the right side toward the eye
+		`C ${p(0.95, -3.18)} ${p(1.18, -2.05)} ${p(0.18, -1.58)}`, // upper loop, back toward center
+		`C ${p(-1.05, -1.12)} ${p(-1.3, 0.55)} ${p(0.12, 0.82)}`, // big full belly sweeping down-left
+		`C ${p(1.15, 1.02)} ${p(1.1, -0.3)} ${p(0.08, -0.42)}`, // up the right side toward the eye
 		`C ${p(-0.48, -0.5)} ${p(-0.5, 0.22)} ${p(0.06, 0.16)}`, // the eye loop on G4
 		`C ${p(0.3, 0.12)} ${p(0.18, 0.55)} ${p(0.1, 1.05)}`, // leave the eye into the tail
 		`L ${p(0.04, 2.05)}`, // straight tail below the staff
