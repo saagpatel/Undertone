@@ -1,3 +1,4 @@
+import { CLEF_GAP_FACTOR, TIME_SIG_GAP } from "./layout";
 import type { StaffGeometry, SVGElementSpec } from "./types";
 
 const round = (n: number): number => Math.round(n * 100) / 100;
@@ -110,4 +111,42 @@ export function brace(
 	].join(" ");
 
 	return { kind: "path", attrs: { d, fill: "none" }, className: "brace" };
+}
+
+/**
+ * A hand-scored time signature: two stacked digits placed in the reserved
+ * {@link TIME_SIG_GAP} just after the clef. The numerator is centred in the top
+ * half of the staff and the denominator in the bottom half; both scale with the
+ * line spacing. Rendered as serif text (like the chord symbols) — the digits
+ * carry an explicit `fontSize` so the canvas and the standalone export size them
+ * identically from the same geometry.
+ */
+export function timeSignature(
+	geom: StaffGeometry,
+	numerator: number,
+	denominator: number,
+): SVGElementSpec[] {
+	const ls = geom.lineSpacing;
+	// Centre of the time-sig gap, between the clef and beat 0.
+	const x = round(geom.x + ls * (CLEF_GAP_FACTOR + TIME_SIG_GAP / 2));
+	const fontSize = round(ls * 1.9); // ≈ two staff spaces tall, per convention
+
+	const digit = (value: number, cy: number): SVGElementSpec => ({
+		kind: "text",
+		text: String(value),
+		attrs: {
+			x,
+			y: round(cy),
+			textAnchor: "middle",
+			dominantBaseline: "central",
+			fontSize,
+			fill: "currentColor",
+		},
+		className: "time-sig",
+	});
+
+	return [
+		digit(numerator, geom.y + ls), // top half: between the top line and the middle
+		digit(denominator, geom.y + 3 * ls), // bottom half: between the middle and bottom line
+	];
 }
