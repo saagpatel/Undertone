@@ -1,22 +1,65 @@
-import type { NoteEvent, NoteName, NoteValue } from "../dsp/quantize";
+import {
+	NOTE_VALUE_BEATS,
+	type NoteEvent,
+	type NoteName,
+	type NoteValue,
+	type Phrase,
+} from "../dsp/quantize";
 import type { StaffGeometry } from "./types";
 
 export const DEFAULT_LINE_SPACING = 10;
 
 /** Horizontal factors for beat→x mapping. Kept here as the single source of truth. */
 export const CLEF_GAP_FACTOR = 4; // staff spaces reserved for the clef before note 1
+export const TIME_SIG_GAP = 2.5; // staff spaces reserved for the time signature after the clef
 export const PIXELS_PER_BEAT_FACTOR = 3.2; // horizontal spread per quarter-note beat
 
 /**
- * Convert a beat position to an x-coordinate on the staff.
- * The clef + gap occupies `CLEF_GAP_FACTOR` line spacings to the left of beat 0.
+ * Convert a beat position to an x-coordinate on the staff. The clef occupies
+ * `CLEF_GAP_FACTOR` line spacings and the time signature a further
+ * `TIME_SIG_GAP` to the left of beat 0. Both the treble and bass staves share
+ * one geometry's `x`/`lineSpacing`, so this is the single source of x-truth that
+ * keeps the two staves' beat columns vertically aligned.
  */
 export function beatToX(beatPosition: number, geom: StaffGeometry): number {
-	const leftMargin = geom.x + geom.lineSpacing * CLEF_GAP_FACTOR;
+	const leftMargin =
+		geom.x + geom.lineSpacing * (CLEF_GAP_FACTOR + TIME_SIG_GAP);
 	const pxPerBeat = geom.lineSpacing * PIXELS_PER_BEAT_FACTOR;
 	return leftMargin + beatPosition * pxPerBeat;
 }
 const STAFF_LINES = 5;
+
+/**
+ * Beat where the phrase ends: the latest note's end (onset + value), in
+ * quarter-note units. Order-independent — never assumes notes are sorted.
+ * Returns 0 for an empty phrase.
+ */
+export function phraseEndBeat(phrase: Phrase): number {
+	return phrase.notes.reduce(
+		(end, n) => Math.max(end, n.beatPosition + NOTE_VALUE_BEATS[n.noteValue]),
+		0,
+	);
+}
+
+/**
+ * Internal barline beat positions for a phrase: every measure boundary strictly
+ * between the start and the phrase end. Beats per measure is the time-signature
+ * numerator (quarter-note beats), matching how {@link harmonize} slices measures
+ * so barlines fall on the same boundaries as the chord slots. The final barline
+ * (at the phrase end) is the renderer's concern, not a boundary here.
+ *
+ * A 2-measure 4/4 phrase → `[4]`.
+ */
+export function measureBoundaries(phrase: Phrase): number[] {
+	const beatsPerMeasure = phrase.timeSignatureNumerator;
+	if (beatsPerMeasure <= 0) return [];
+	const end = phraseEndBeat(phrase);
+	const boundaries: number[] = [];
+	for (let beat = beatsPerMeasure; beat < end; beat += beatsPerMeasure) {
+		boundaries.push(beat);
+	}
+	return boundaries;
+}
 
 /** Diatonic position within an octave (C=0 .. B=6). Accidentals don't shift it. */
 const DIATONIC_INDEX: Record<NoteName, number> = {

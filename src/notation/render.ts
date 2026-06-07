@@ -3,14 +3,16 @@ import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { type VoicedChord, type VoicedTone, voiceChord } from "../dsp/voicing";
 import { accidentalFor } from "./accidentals";
-import { bassClef, brace, trebleClef } from "./clef";
+import { bassClef, brace, timeSignature, trebleClef } from "./clef";
 import {
 	bassStaffGeometry,
 	beamGroups,
 	beatToX,
 	isBeamable,
+	measureBoundaries,
 	notePosition,
 	notePositionBass,
+	phraseEndBeat,
 } from "./layout";
 import type { StaffGeometry, SVGElementSpec } from "./types";
 
@@ -61,8 +63,16 @@ export function phraseToSVG(
 		});
 	}
 
-	// 2. Treble clef (a drawn path, not a font glyph).
+	// 2. Treble clef (a drawn path, not a font glyph) + the time signature, both
+	//    part of the staff "frame".
 	specs.push({ ...trebleClef(geom), reveal: "frame" });
+	for (const sig of timeSignature(
+		geom,
+		phrase.timeSignatureNumerator,
+		phrase.timeSignatureDenominator,
+	)) {
+		specs.push({ ...sig, reveal: "frame" });
+	}
 
 	// 3. Per-note: ledger lines, accidental, notehead, stem. Each note's glyphs
 	//    share its index so the reveal animation staggers them in playing order.
@@ -139,6 +149,10 @@ export function phraseToSVG(
 		});
 	}
 
+	// 4b. Barlines at each measure boundary plus the final barline, full-height
+	//     across the grand staff when harmony is engraved. Part of the frame.
+	specs.push(...barlineSpecs(phrase, geom, isHarmonized(chords)));
+
 	// 5. Chord symbols: one text label per chord, revealed with the frame so they
 	//    appear before individual notes animate in. Placed above the top staff line.
 	if (isHarmonized(chords)) {
@@ -166,6 +180,48 @@ export function phraseToSVG(
 		//    chord's accompaniment aligned to the same beat columns.
 		specs.push(...bassStaffSpecs(phrase, geom, chords, rx, ry, style));
 	}
+
+	return specs;
+}
+
+/**
+ * Vertical barlines: one at each internal {@link measureBoundaries} position,
+ * nudged just left of the downbeat so it clears the note there, plus a final
+ * thin+thick barline at the phrase end. On a grand staff each line spans from
+ * the treble top line down to the bass bottom line; on a single staff it spans
+ * the treble only. All are part of the staff `"frame"`.
+ */
+function barlineSpecs(
+	phrase: Phrase,
+	geom: StaffGeometry,
+	grandStaff: boolean,
+): SVGElementSpec[] {
+	if (phrase.notes.length === 0) return [];
+
+	const ls = geom.lineSpacing;
+	const top = geom.y;
+	const bottom = grandStaff
+		? bassStaffGeometry(geom).y + (geom.numLines - 1) * ls
+		: geom.y + (geom.numLines - 1) * ls;
+
+	const vline = (x: number, className: string): SVGElementSpec => ({
+		kind: "line",
+		attrs: { x1: round(x), y1: round(top), x2: round(x), y2: round(bottom) },
+		className,
+		reveal: "frame",
+	});
+
+	const specs: SVGElementSpec[] = [];
+
+	// Internal barlines, nudged one line-space left to sit before each downbeat.
+	for (const beat of measureBoundaries(phrase)) {
+		specs.push(vline(beatToX(beat, geom) - ls, "barline"));
+	}
+
+	// Final barline at the phrase end: a thin line backed by a heavier one.
+	const endX = beatToX(phraseEndBeat(phrase), geom);
+	specs.push(vline(endX, "barline"));
+	specs.push(vline(endX + ls * 0.35, "barline barline--final"));
 
 	return specs;
 }
@@ -202,6 +258,14 @@ function bassStaffSpecs(
 	}
 	for (const clefSpec of bassClef(geom))
 		specs.push({ ...clefSpec, reveal: "frame" });
+	// The time signature repeats on the bass staff of the grand staff.
+	for (const sig of timeSignature(
+		geom,
+		phrase.timeSignatureNumerator,
+		phrase.timeSignatureDenominator,
+	)) {
+		specs.push({ ...sig, reveal: "frame" });
+	}
 
 	// Reveal index of the melody note at or before a given beat, so each chord
 	// stack inks in as the melody reaches it.
