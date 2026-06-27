@@ -1,6 +1,7 @@
 {
 	"name": "undertone",
 	"private": true,
+	"license": "MIT",
 	"version": "0.0.0",
 	"type": "module",
 	"description": "Hum a melody; Undertone reveals it as hand-scored sheet music. Browser-only, no backend.",
