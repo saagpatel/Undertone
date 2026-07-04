@@ -5,3 +5,5 @@
 # fails the pre-run dep check behind `pnpm test` / `pnpm build`.
 allowBuilds:
   esbuild: true
+overrides:
+  form-data: ^4.0.6
