@@ -113,6 +113,21 @@ export class MemoryStore implements CompositionStore {
 		return record ? cloneRecord(record) : null;
 	}
 
+	async update(
+		id: string,
+		composition: Composition,
+	): Promise<CompositionRecord> {
+		const record = this.records.get(id);
+		if (!record) throw new RecordNotFoundError(id);
+		const updated: CompositionRecord = {
+			...record,
+			composition: cloneComposition(composition),
+			updatedAt: this.now(),
+		};
+		this.records.set(id, updated);
+		return cloneRecord(updated);
+	}
+
 	async rename(id: string, name: string): Promise<CompositionRecord> {
 		const record = this.records.get(id);
 		if (!record) throw new RecordNotFoundError(id);

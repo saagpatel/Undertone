@@ -3,6 +3,8 @@ import { byMostRecentlyUpdated, defaultNewId, normalizeName } from "./memoryStor
 import type { StoreDeps } from "./memoryStore";
 import {
 	RecordNotFoundError,
+	StorageError,
+	StorageFullError,
 	StoreUnavailableError,
 } from "./types";
 import type {
@@ -12,12 +14,27 @@ import type {
 	StoreKind,
 } from "./types";
 
+/**
+ * Classify a failed IndexedDB operation.
+ *
+ * A quota failure gets its own error because the user can act on it — delete
+ * something, or export to a file. Reporting it as a generic store failure
+ * would leave them with a message and nothing to do about it.
+ */
+export function toStoreError(error: unknown, what: string): StorageError {
+	const name =
+		typeof error === "object" && error !== null && "name" in error
+			? String((error as { name: unknown }).name)
+			: "";
+	if (name === "QuotaExceededError") return new StorageFullError(error);
+	return new StoreUnavailableError(`Failed to ${what}.`, error);
+}
+
 /** Promisify an IDBRequest, preserving the underlying DOMException as the cause. */
 function requestToPromise<T>(request: IDBRequest<T>, what: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		request.onsuccess = () => resolve(request.result);
-		request.onerror = () =>
-			reject(new StoreUnavailableError(`Failed to ${what}.`, request.error));
+		request.onerror = () => reject(toStoreError(request.error, what));
 	});
 }
 
@@ -28,20 +45,8 @@ function transactionToPromise(
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		transaction.oncomplete = () => resolve();
-		transaction.onabort = () =>
-			reject(
-				new StoreUnavailableError(
-					`Transaction aborted while trying to ${what}.`,
-					transaction.error,
-				),
-			);
-		transaction.onerror = () =>
-			reject(
-				new StoreUnavailableError(
-					`Transaction failed while trying to ${what}.`,
-					transaction.error,
-				),
-			);
+		transaction.onabort = () => reject(toStoreError(transaction.error, what));
+		transaction.onerror = () => reject(toStoreError(transaction.error, what));
 	});
 }
 
@@ -169,6 +174,25 @@ export class IndexedDbStore implements CompositionStore {
 			`load composition "${id}"`,
 		);
 		return record ?? null;
+	}
+
+	async update(
+		id: string,
+		composition: Composition,
+	): Promise<CompositionRecord> {
+		const existing = await this.load(id);
+		if (!existing) throw new RecordNotFoundError(id);
+
+		const updated: CompositionRecord = {
+			...existing,
+			composition,
+			updatedAt: this.now(),
+		};
+
+		const transaction = this.db.transaction(STORE_NAME, "readwrite");
+		transaction.objectStore(STORE_NAME).put(structuredClone(updated));
+		await transactionToPromise(transaction, `save over "${existing.name}"`);
+		return structuredClone(updated);
 	}
 
 	async rename(id: string, name: string): Promise<CompositionRecord> {

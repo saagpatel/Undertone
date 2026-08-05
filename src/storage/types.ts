@@ -41,6 +41,12 @@ export interface CompositionStore {
 	list(): Promise<CompositionRecord[]>;
 	/** One record by id, or null when it does not exist. */
 	load(id: string): Promise<CompositionRecord | null>;
+	/**
+	 * Overwrite an existing record's music, keeping its id, name, and creation
+	 * time. This is "save over what I opened" — the counterpart to `save`,
+	 * which always creates a new record.
+	 */
+	update(id: string, composition: Composition): Promise<CompositionRecord>;
 	/** Rename an existing record, returning the updated copy. */
 	rename(id: string, name: string): Promise<CompositionRecord>;
 	/** Remove a record. Deleting an unknown id is an error, not a silent no-op. */
@@ -82,10 +88,27 @@ export class RecordNotFoundError extends StorageError {
 	}
 }
 
-/** The backing store rejected an operation (quota, blocked upgrade, I/O). */
+/** The backing store rejected an operation (blocked upgrade, I/O). */
 export class StoreUnavailableError extends StorageError {
 	constructor(message: string, underlying?: unknown) {
 		super(message, underlying);
 		this.name = "StoreUnavailableError";
+	}
+}
+
+/**
+ * The browser refused a write because its storage allowance is used up.
+ *
+ * Distinct from {@link StoreUnavailableError} because the user can act on it —
+ * delete something, or export to a file — where a generic failure leaves them
+ * nothing to do.
+ */
+export class StorageFullError extends StorageError {
+	constructor(underlying?: unknown) {
+		super(
+			"Your browser's storage is full. Delete a composition, or export this one to a file.",
+			underlying,
+		);
+		this.name = "StorageFullError";
 	}
 }

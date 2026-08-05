@@ -628,6 +628,77 @@ def main() -> int:
                 f"{len(edited_ys)} notes",
             )
 
+            # --- Act 5: destructive confirmation and save-over -------------
+            print("\n=== ACT 5 — delete confirmation and save-over ===", flush=True)
+
+            # The score is open from the library, so save-over is offered.
+            check(
+                "reopening a record offers to save changes over it",
+                ed.get_by_role("button", name="Save changes").count() == 1,
+            )
+            check(
+                "save-over is disabled until the score is actually edited",
+                ed.get_by_role("button", name="Save changes").is_disabled(),
+            )
+
+            ed.locator(".app__stage").focus()
+            ed.keyboard.press("ArrowRight")
+            ed.keyboard.press("ArrowUp")
+            ed.wait_for_timeout(400)
+            edited_after_reopen = note_ys()
+            check(
+                "save-over becomes available once the score is edited",
+                not ed.get_by_role("button", name="Save changes").is_disabled(),
+            )
+
+            before_count = ed.locator(".library__open").count()
+            ed.get_by_role("button", name="Save changes").click()
+            ed.wait_for_timeout(500)
+            check(
+                "saving over replaces the record instead of adding one",
+                ed.locator(".library__open").count() == before_count,
+                f"{before_count} records",
+            )
+
+            # Reload and reopen: the overwrite must have persisted.
+            ed.goto(origin, wait_until="networkidle")
+            ed.wait_for_timeout(400)
+            ed.get_by_role("button", name="Edited score").click()
+            ed.wait_for_timeout(500)
+            check(
+                "the overwrite survived a reload",
+                note_ys() == edited_after_reopen,
+            )
+
+            # Deleting must ask first.
+            records_before = ed.locator(".library__open").count()
+            ed.get_by_role("button", name="Delete", exact=True).first.click()
+            ed.wait_for_timeout(300)
+            check(
+                "deleting asks before destroying anything",
+                ed.get_by_role("button", name="Delete for good").count() == 1
+                and ed.locator(".library__open").count() == records_before - 1,
+                "the row swaps to a confirmation",
+            )
+
+            ed.get_by_role("button", name="Keep it").click()
+            ed.wait_for_timeout(300)
+            check(
+                "dismissing the confirmation keeps the composition",
+                ed.locator(".library__open").count() == records_before,
+                f"{records_before} records intact",
+            )
+
+            ed.get_by_role("button", name="Delete", exact=True).first.click()
+            ed.wait_for_timeout(200)
+            ed.get_by_role("button", name="Delete for good").click()
+            ed.wait_for_timeout(500)
+            check(
+                "confirming actually deletes",
+                ed.locator(".library__open").count() == records_before - 1,
+                f"{records_before} -> {ed.locator('.library__open').count()}",
+            )
+
             check(
                 "no console errors while editing",
                 not ed_errors,
