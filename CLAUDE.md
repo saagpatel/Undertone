@@ -29,7 +29,7 @@ Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architectu
 
 On `main` as of 2026-08-04: v1 (Phases 0–3), v2 (Phases 4–6), and v3 Phases 7–12 — chromatic
 harmony, accompaniment textures, barlines + time signature, local persistence with share links and
-file I/O, MIDI keyboard input, and in-app score editing. 378 vitest tests plus 55 browser checks,
+file I/O, MIDI keyboard input, and in-app score editing. 408 vitest tests plus 65 browser checks,
 all green.
 
 Phases 7–9 were written 2026-06-19 and sat unmerged on branches until 2026-08-04; they are landed
@@ -79,8 +79,8 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 
 **v3 complete.** Capture from microphone or MIDI keyboard, notation, playback, SVG export, key
 detection, diatonic and chromatic harmony, accompaniment textures, measure structure, local
-persistence with share links, and hand-editing the score are all on `main`. 378 vitest tests plus
-55 browser checks, green.
+persistence with share links, and hand-editing the score are all on `main`. 408 vitest tests plus
+65 browser checks, green.
 
 See IMPLEMENTATION-ROADMAP.md for full phase details.
 
@@ -111,9 +111,9 @@ pnpm build && python3 scripts/prove-browser.py   # real-browser checks + screens
 
 ## Next Recommended Move
 
-The roadmap is finished, so the next move is an operator decision rather than a queued phase. Two
-things are worth doing before new scope: exercise the Phase 11 MIDI path with a physical keyboard
-(unit-tested and feature-detected, but never run against real hardware), and close the known Phase
-10 gaps — no delete confirmation, no save-over, no specific quota-exhausted state.
+The roadmap is finished and the Phase 10 gaps are closed, so the next move is an operator decision
+rather than queued work. One thing is worth doing before new scope: exercise the Phase 11 MIDI path
+with a physical keyboard. It is unit-tested and feature-detected, and the port is now opened
+explicitly, but it has never run against real hardware.
 
 <!-- portfolio-context:end -->
