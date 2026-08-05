@@ -4,11 +4,12 @@
 Browser-based musical toy. Hum or whistle a melody into your mic — Undertone captures and renders it in real time as hand-scored sheet music, as if your voice revealed a composition the world was always hiding. Local-only, no backend, no install. First browser-audio + procedural-notation project.
 
 ## Tech Stack
-- React 18 + Vite 5 + TypeScript 5 (strict mode)
+- React 18 + Vite 6 + TypeScript 5 (strict mode)
 - Web Audio API — mic capture via `getUserMedia`, real-time pitch detection via autocorrelation on `AnalyserNode` time-domain data
-- Procedural SVG — pure-TS notation renderer (staff, treble clef, noteheads, stems, beams)
-- Vitest — unit tests (pitch math, quantization, SVG layout)
-- Playwright — optional e2e mic-flow (Phase 3)
+- Procedural SVG — pure-TS notation renderer (staff, clefs, noteheads, stems, beams, barlines, time signatures)
+- IndexedDB — composition library, with an in-memory fallback when storage is blocked
+- Vitest — unit tests (pitch math, quantization, SVG layout, codec, storage)
+- Playwright (Python) — `scripts/prove-phase10.py` drives real Chromium for what jsdom cannot cover: real IndexedDB, and the zero-network invariant on the production build
 
 ## Development Conventions
 - Strict TypeScript: no `any`, `unknown` + narrowing preferred; string-literal unions over enums.
@@ -17,13 +18,25 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 - Conventional commits: `feat:`, `fix:`, `chore:`. Small logical units. Feature branch always — never commit to main.
 - All DSP math (autocorrelation, quantization) lives in `src/dsp/` — pure functions, no side effects, fully unit-tested.
 - SVG renderer lives in `src/notation/` — pure functions mapping `Phrase` data → SVG element descriptions.
+- Persistence lives in `src/storage/` — every tunable in `config.ts`, a typed error hierarchy in `types.ts`, and one `CompositionStore` contract that both the IndexedDB and in-memory stores are held to via `storeContract.ts`. Add a store implementation by satisfying that contract, not by writing a parallel suite.
 
 ## CC Infrastructure
 This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP plugins.
 Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architecture.
 
 ## Current Phase
-**v3 · Phase 7: Chromatic Harmony (pure DSP)** — v1 (Phases 0–3) and v2 (Phases 4–6) complete and shipped to `main`.
+**v3 · Phase 11: MIDI Input (Web MIDI API) — next.**
+
+On `main` as of 2026-08-04: v1 (Phases 0–3), v2 (Phases 4–6), and v3 Phases 7 (chromatic harmony),
+8 (accompaniment textures), 9 (barlines + time signature), and 10 (local persistence, share links,
+file I/O). 277 vitest tests plus 30 browser checks, all green.
+
+Phases 7–9 were written 2026-06-19 and sat unmerged on branches until 2026-08-04; they are landed
+now, so `main` is the single source of truth again. Phase 12 remains unbuilt.
+
+Note for Phase 11: Safari does not ship Web MIDI, so that phase is Chrome/Edge only. The roadmap
+already requires feature detection and a hidden toggle; it just does not say the limitation out loud.
+
 See IMPLEMENTATION-ROADMAP.md (the "v3 — Depth, Input, Editing & Persistence" section) for full phase details.
 
 ## Key Decisions
@@ -55,30 +68,42 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 
 ## Current State
 
-**Phase 0: Scaffold + Web Audio + Real-Time Pitch Detection**
+**v3 · Phase 10 complete; Phase 11 (MIDI input) is next.** Capture, notation, playback, SVG export,
+key detection, diatonic and chromatic harmony, accompaniment textures, measure structure, and local
+persistence with share links are all on `main`. 277 vitest tests plus 30 browser checks, green.
+
 See IMPLEMENTATION-ROADMAP.md for full phase details.
 
 ## Stack
 
-- React 18 + Vite 5 + TypeScript 5 (strict mode)
+- React 18 + Vite 6 + TypeScript 5 (strict mode)
 - Web Audio API — mic capture via `getUserMedia`, real-time pitch detection via autocorrelation on `AnalyserNode` time-domain data
-- Procedural SVG — pure-TS notation renderer (staff, treble clef, noteheads, stems, beams)
-- Vitest — unit tests (pitch math, quantization, SVG layout)
-- Playwright — optional e2e mic-flow (Phase 3)
+- Procedural SVG — pure-TS notation renderer (staff, clefs, noteheads, stems, beams, barlines, time signatures)
+- IndexedDB — composition library, with an in-memory fallback when storage is blocked
+- Vitest — unit tests; Playwright (Python) for the real-browser proof harness
 
 ## How To Run
 
-- Review the README and top-level scripts before the next session; this repo does not yet expose one canonical run command inside the new context block.
+```bash
+pnpm install --frozen-lockfile
+pnpm dev                                # http://localhost:5173
+pnpm test                               # vitest
+pnpm tsc --noEmit                       # typecheck
+pnpm build                              # production bundle
+pnpm build && python3 scripts/prove-phase10.py   # real-browser checks + screenshots
+```
 
 ## Known Risks
 
-- Do not add a backend — client-side only, nothing leaves the browser tab.
-- Do not build v2 procedural harmonization or accompaniment in v1 — melody-only is the locked scope.
+- Do not add a backend — client-side only, nothing leaves the browser tab. Sharing is a URL hash and local files; the zero-network invariant is asserted in the browser harness.
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
 - Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md.
 
 ## Next Recommended Move
 
-Use this context plus the README and supporting docs to resume the next active task, then promote the repo beyond minimum-viable by capturing a dedicated handoff, roadmap, or discovery artifact.
+Build **v3 Phase 11: MIDI input** — Web MIDI capture converted to the same `NoteEvent` stream the
+pitch detector emits, so `quantize`, `detectKey`, `harmonize`, and the renderer are reused
+unchanged. Feature-detect and hide the toggle where Web MIDI is absent (Safari), leaving the mic
+path unaffected.
 
 <!-- portfolio-context:end -->
