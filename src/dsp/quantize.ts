@@ -67,13 +67,24 @@ const SIXTEENTH_BEATS = 0.25;
 /** Onset must land within this fraction of a 16th-note to snap to the grid. */
 export const BEAT_SNAP_TOLERANCE = 0.2;
 
+/** Tuning reference: A4 = 440 Hz, which is MIDI note 69. */
+export const A4_FREQUENCY = 440;
+export const A4_MIDI_NOTE = 69;
+
+/** MIDI note number -> frequency (Hz) in equal temperament. */
+export function midiNoteToFrequency(midiNote: number): number {
+	return A4_FREQUENCY * 2 ** ((midiNote - A4_MIDI_NOTE) / 12);
+}
+
 /** Frequency -> chromatic pitch via the MIDI number 69 + 12·log2(f/440). */
 export function frequencyToPitch(frequency: number): {
 	pitch: NoteName;
 	accidental: Accidental;
 	octave: number;
 } {
-	const midi = Math.round(69 + 12 * Math.log2(frequency / 440));
+	const midi = Math.round(
+		A4_MIDI_NOTE + 12 * Math.log2(frequency / A4_FREQUENCY),
+	);
 	const pitchClass = ((midi % 12) + 12) % 12;
 	const octave = Math.floor(midi / 12) - 1;
 	const spelling = PITCH_CLASSES[pitchClass];
@@ -101,7 +112,7 @@ export function noteFrequency(
 	const offset =
 		note.accidental === "sharp" ? 1 : note.accidental === "flat" ? -1 : 0;
 	const midi = (note.octave + 1) * 12 + NATURAL_SEMITONES[note.pitch] + offset;
-	return 440 * 2 ** ((midi - 69) / 12);
+	return midiNoteToFrequency(midi);
 }
 
 /** Nearest note value to a raw duration, compared in log space (musical ratio). */

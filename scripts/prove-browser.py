@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Phase 10 end-to-end proof, run against a real browser.
+"""End-to-end proof for the browser-only behaviour vitest cannot reach.
 
-The vitest suite proves the codec and the in-memory library. It cannot prove
-IndexedDB (jsdom has none) or the "zero network requests" invariant, so this
-harness drives real Chromium:
+jsdom has no IndexedDB, no real network, and no Web MIDI, so this harness
+drives real Chromium:
 
   Act 1 — against the Vite dev server, dynamically import the real storage
           modules in the page and exercise IndexedDbStore against real
           IndexedDB, including survival across a full page reload.
   Act 2 — against a production preview of dist/, cold-load a share link and
           assert the score engraves with no microphone and no network traffic
-          beyond the app's own assets.
+          beyond the app's own assets; then drive a genuine save rejection
+          through the UI to prove a failed save never reports success.
+  Act 3 — assert the Phase 11 MIDI toggle appears where Web MIDI exists, and
+          disappears entirely where it does not (Safari), with the microphone
+          path unaffected either way.
 
 Exit code is 0 only if every assertion holds.
 """
@@ -29,7 +32,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
 DEV_PORT = 5173
 PREVIEW_PORT = 4173
-SHOTS = ROOT / "artifacts" / "phase10"
+SHOTS = ROOT / "artifacts" / "browser-proof"
 
 failures: list[str] = []
 checks = 0
@@ -370,7 +373,88 @@ def main() -> int:
             )
             cold.screenshot(path=str(SHOTS / "damaged-share-link.png"), full_page=True)
             cold.close()
-            page.screenshot(path=str(SHOTS / "damaged-share-link.png"), full_page=True)
+
+            # --- Act 3: MIDI input feature detection -----------------------
+            print("\n=== ACT 3 — MIDI input feature detection ===", flush=True)
+
+            withmidi = context.new_page()
+            withmidi.goto(origin, wait_until="networkidle")
+            withmidi.wait_for_timeout(400)
+            check(
+                "Web MIDI is present in this browser, so the toggle is offered",
+                withmidi.get_by_role("button", name="MIDI keyboard").count() == 1,
+            )
+            check(
+                "the microphone option is offered alongside it",
+                withmidi.get_by_role("button", name="Microphone").count() == 1,
+            )
+
+            withmidi.get_by_role("button", name="MIDI keyboard").click()
+            withmidi.wait_for_timeout(600)
+            midi_body = withmidi.inner_text("body")
+            check(
+                "arming MIDI with no keyboard attached explains itself",
+                "connect a midi keyboard" in midi_body.lower()
+                or "no midi device" in midi_body.lower(),
+                midi_body[:110].replace("\n", " "),
+            )
+            check(
+                "the capture transport is still offered with MIDI armed",
+                withmidi.get_by_role("button", name="Start humming").count()
+                + withmidi.get_by_role("button", name="Hum again").count()
+                >= 1,
+            )
+            check(
+                "a MIDI failure is reported once, not echoed in the generic slot",
+                withmidi.locator("[role=alert]").count() <= 1,
+                f"{withmidi.locator('[role=alert]').count()} alerts",
+            )
+            withmidi.screenshot(path=str(SHOTS / "midi-armed.png"), full_page=True)
+            withmidi.close()
+
+            # Simulate Safari: no requestMIDIAccess at all, injected before any
+            # app code runs. The toggle must disappear rather than offer an
+            # input that can never connect, and the mic path must be untouched.
+            nomidi_ctx = browser.new_context(viewport={"width": 1280, "height": 1400})
+            nomidi_ctx.add_init_script(
+                "delete Navigator.prototype.requestMIDIAccess;"
+                "Object.defineProperty(navigator, 'requestMIDIAccess',"
+                " {value: undefined, configurable: true});"
+            )
+            nomidi = nomidi_ctx.new_page()
+            nomidi_errors: list[str] = []
+            nomidi.on(
+                "console",
+                lambda m: nomidi_errors.append(m.text) if m.type == "error" else None,
+            )
+            nomidi.goto(origin, wait_until="networkidle")
+            nomidi.wait_for_timeout(400)
+
+            check(
+                "without Web MIDI the toggle is hidden entirely",
+                nomidi.get_by_role("button", name="MIDI keyboard").count() == 0,
+            )
+            check(
+                "without Web MIDI no input-source group is rendered at all",
+                nomidi.locator(".input-source").count() == 0,
+            )
+            check(
+                "the microphone path is unaffected without Web MIDI",
+                nomidi.get_by_role("button", name="Start humming").count()
+                + nomidi.get_by_role("button", name="Hum again").count()
+                >= 1,
+            )
+            check(
+                "the library still works without Web MIDI",
+                nomidi.get_by_role("heading", name="Library").count() == 1,
+            )
+            check(
+                "no console errors without Web MIDI",
+                not nomidi_errors,
+                "; ".join(nomidi_errors[:3]),
+            )
+            nomidi.screenshot(path=str(SHOTS / "no-web-midi.png"), full_page=True)
+            nomidi_ctx.close()
 
             browser.close()
 
