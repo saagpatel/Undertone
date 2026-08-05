@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { bassClef, brace, trebleClef } from "./clef";
-import { bassStaffGeometry, notePositionBass, staffGeometry } from "./layout";
+import { bassClef, brace, timeSignature, trebleClef } from "./clef";
+import {
+	bassStaffGeometry,
+	CLEF_GAP_FACTOR,
+	notePositionBass,
+	staffGeometry,
+	TIME_SIG_GAP,
+} from "./layout";
 
 const geom = staffGeometry({ x: 28, y: 72, width: 520, lineSpacing: 13 });
 
@@ -112,5 +118,49 @@ describe("brace", () => {
 			(m) => Number(m.replace(/[ML]\s*/, "")),
 		);
 		for (const x of xs) expect(x).toBeLessThanOrEqual(geom.x);
+	});
+});
+
+describe("timeSignature", () => {
+	const specs = timeSignature(geom, 4, 4);
+
+	it("returns two stacked text digits", () => {
+		expect(specs).toHaveLength(2);
+		for (const s of specs) {
+			expect(s.kind).toBe("text");
+			expect(s.className).toBe("time-sig");
+		}
+	});
+
+	it("renders the numerator over the denominator", () => {
+		const [num, den] = specs;
+		expect(num.text).toBe("4");
+		expect(den.text).toBe("4");
+		expect(Number(num.attrs.y)).toBeLessThan(Number(den.attrs.y)); // numerator is higher
+	});
+
+	it("reflects the actual meter (3/4)", () => {
+		const [num, den] = timeSignature(geom, 3, 4);
+		expect(num.text).toBe("3");
+		expect(den.text).toBe("4");
+	});
+
+	it("centres both digits on one x in the reserved time-sig gap, after the clef", () => {
+		const [num, den] = specs;
+		const clefEdge = geom.x + geom.lineSpacing * CLEF_GAP_FACTOR;
+		const beatZero =
+			geom.x + geom.lineSpacing * (CLEF_GAP_FACTOR + TIME_SIG_GAP);
+		expect(num.attrs.x).toBe(den.attrs.x);
+		expect(Number(num.attrs.x)).toBeGreaterThan(clefEdge);
+		expect(Number(num.attrs.x)).toBeLessThan(beatZero);
+		for (const s of specs) expect(s.attrs.textAnchor).toBe("middle");
+	});
+
+	it("scales the digit height with line spacing", () => {
+		const small = timeSignature(staffGeometry({ lineSpacing: 10 }), 4, 4)[0];
+		const large = timeSignature(staffGeometry({ lineSpacing: 20 }), 4, 4)[0];
+		expect(Number(large.attrs.fontSize)).toBeGreaterThan(
+			Number(small.attrs.fontSize),
+		);
 	});
 });

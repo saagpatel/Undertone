@@ -1,3 +1,4 @@
+import type { AccompanimentStyle } from "../dsp/accompaniment";
 import { type Chord, isHarmonized } from "../dsp/harmony";
 import type { Phrase } from "../dsp/quantize";
 import { notationHeight } from "./layout";
@@ -39,6 +40,15 @@ const PRESENTATION: Record<string, Record<string, string | number>> = {
 	"clef-dot": { fill: INK },
 	// The grand-staff brace joining the treble and bass staves.
 	brace: { stroke: INK, "stroke-width": 1.8, "stroke-linecap": "round" },
+	// Barlines (Phase 9): thin internal/final, plus a heavier final stroke.
+	barline: { stroke: INK, "stroke-width": 1.6, "stroke-linecap": "round" },
+	"barline--final": { "stroke-width": 4 },
+	// Time-signature digits: text needs an explicit fill under the <g fill="none">
+	// wrapper; the per-element fontSize attr carries the size.
+	"time-sig": {
+		fill: INK,
+		"font-family": "Georgia, 'Times New Roman', serif",
+	},
 	// Chord symbols: text elements need explicit fill because the export wraps
 	// everything in <g fill="none">; without it the text renders invisible.
 	"chord-symbol": {
@@ -99,10 +109,11 @@ export function serializePhraseSVG(
 	phrase: Phrase,
 	geom: StaffGeometry,
 	chords?: Chord[],
+	style: AccompanimentStyle = "block",
 ): string {
 	const viewW = geom.x * 2 + geom.width;
 	const viewH = notationHeight(geom, isHarmonized(chords));
-	const elements = phraseToSVG(phrase, geom, chords)
+	const elements = phraseToSVG(phrase, geom, chords, style)
 		.map(serializeElement)
 		.join("");
 

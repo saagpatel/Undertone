@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AccompanimentStyle } from "../dsp/accompaniment";
 import type { Chord } from "../dsp/harmony";
 import {
 	buildAccompanimentSchedule,
@@ -93,7 +94,11 @@ function scheduleVoice(
  * as triangle-wave tones at a much lower gain (~0.05) so they sit underneath
  * the melody without competing with it.
  */
-export function usePlayback(phrase: Phrase | null, chords?: Chord[]): Playback {
+export function usePlayback(
+	phrase: Phrase | null,
+	chords?: Chord[],
+	style: AccompanimentStyle = "block",
+): Playback {
 	const contextRef = useRef<AudioContext | null>(null);
 	const voicesRef = useRef<Voice[]>([]);
 	const endTimerRef = useRef<number | null>(null);
@@ -143,7 +148,7 @@ export function usePlayback(phrase: Phrase | null, chords?: Chord[]): Playback {
 		// ── Accompaniment (built once; reused for scheduling + duration) ──────────
 		const accompSchedule =
 			chords && chords.length > 0
-				? buildAccompanimentSchedule(chords, phrase.bpm)
+				? buildAccompanimentSchedule(chords, phrase.bpm, style)
 				: [];
 		const accompVoices = scheduleVoice(ctx, accompSchedule, base, {
 			peak: ACCOMPANIMENT_PEAK,
@@ -169,7 +174,7 @@ export function usePlayback(phrase: Phrase | null, chords?: Chord[]): Playback {
 			endTimerRef.current = null;
 			setIsPlaying(false);
 		}, totalMs);
-	}, [phrase, chords, stop]);
+	}, [phrase, chords, style, stop]);
 
 	// Stop any in-flight playback when the phrase changes (a new capture).
 	useEffect(() => stop, [phrase, stop]);

@@ -3,6 +3,7 @@ import { CaptureButton } from "./components/CaptureButton";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
+import type { AccompanimentStyle } from "./dsp/accompaniment";
 import { harmonize } from "./dsp/harmony";
 import { useActiveComposition } from "./hooks/useActiveComposition";
 import { useCapture } from "./hooks/useCapture";
@@ -26,6 +27,16 @@ function downloadText(filename: string, contents: string, mimeType: string) {
 	URL.revokeObjectURL(url);
 }
 
+/** Accompaniment textures, in selector order. Block is the default (v2 parity). */
+const STYLE_OPTIONS: ReadonlyArray<{
+	value: AccompanimentStyle;
+	label: string;
+}> = [
+	{ value: "block", label: "Block" },
+	{ value: "arpeggio", label: "Arpeggio" },
+	{ value: "alberti", label: "Alberti" },
+];
+
 export default function App() {
 	const { pitch, phrase, captureId, isCapturing, error, start, stop } =
 		useCapture();
@@ -47,8 +58,8 @@ export default function App() {
 				: [],
 		[composition],
 	);
-
-	const playback = usePlayback(composition?.phrase ?? null, chords);
+	const [style, setStyle] = useState<AccompanimentStyle>("block");
+	const playback = usePlayback(composition?.phrase ?? null, chords, style);
 	const status = isCapturing ? "recording" : composition ? "done" : "idle";
 
 	const { load } = active;
@@ -89,7 +100,12 @@ export default function App() {
 
 	const handleExportSVG = () => {
 		if (!composition || !hasNotes) return;
-		const svg = serializePhraseSVG(composition.phrase, NOTATION_GEOM, chords);
+		const svg = serializePhraseSVG(
+			composition.phrase,
+			NOTATION_GEOM,
+			chords,
+			style,
+		);
 		downloadText("undertone.svg", svg, "image/svg+xml");
 	};
 
@@ -179,7 +195,11 @@ export default function App() {
 					<PitchMeter pitch={pitch} />
 				) : composition ? (
 					hasNotes ? (
-						<NotationCanvas phrase={composition.phrase} chords={chords} />
+						<NotationCanvas
+							phrase={composition.phrase}
+							chords={chords}
+							style={style}
+						/>
 					) : (
 						<p className="app__empty">
 							No notes caught — try humming a little louder.
@@ -192,6 +212,30 @@ export default function App() {
 
 			<div className="app__controls">
 				<CaptureButton status={status} onStart={start} onStop={stop} />
+
+				{hasNotes && (
+					<div
+						className="style-selector"
+						role="group"
+						aria-label="Accompaniment style"
+					>
+						{STYLE_OPTIONS.map((opt) => (
+							<button
+								key={opt.value}
+								type="button"
+								aria-pressed={style === opt.value}
+								className={
+									style === opt.value
+										? "style-selector__option is-selected"
+										: "style-selector__option"
+								}
+								onClick={() => setStyle(opt.value)}
+							>
+								{opt.label}
+							</button>
+						))}
+					</div>
+				)}
 
 				{hasNotes && (
 					<div className="score-actions">
