@@ -34,4 +34,13 @@ export interface SVGElementSpec {
 	text?: string;
 	/** Stagger group for the reveal animation; absent → not animated. */
 	reveal?: RevealRole;
+	/**
+	 * Index of the melody note this glyph belongs to, for hit-testing in the
+	 * React layer (Phase 12 editing).
+	 *
+	 * Deliberately separate from `reveal`, which chord glyphs also borrow to
+	 * stagger with the melody note above them — a chord glyph must never
+	 * hit-test as a melody note. Only melody glyphs carry this.
+	 */
+	noteIndex?: number;
 }

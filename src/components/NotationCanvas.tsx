@@ -22,17 +22,34 @@ const VIEW_W = NOTATION_GEOM.x * 2 + NOTATION_GEOM.width;
 const FRAME_LEAD_MS = 140;
 const LAST_NOTE_START_MS = 620;
 
-function specToElement(spec: SVGElementSpec, key: number, delayMs?: number) {
+function specToElement(
+	spec: SVGElementSpec,
+	key: number,
+	delayMs?: number,
+	selectedIndex?: number | null,
+) {
 	const style: CSSProperties | undefined =
 		delayMs === undefined ? undefined : { animationDelay: `${delayMs}ms` };
+
+	// Melody glyphs carry their note index so a click anywhere on the note —
+	// head, stem, accidental, ledger line — resolves to the same melody note.
+	const editable = spec.noteIndex !== undefined;
+	const selected = editable && spec.noteIndex === selectedIndex;
+	const className = [spec.className, selected ? "is-selected" : null]
+		.filter(Boolean)
+		.join(" ");
+
 	// The spec is a generic SVG serialization format; cast at this single boundary
 	// rather than threading element-specific prop types through the renderer.
 	return createElement(
 		spec.kind,
-		{ key, className: spec.className, style, ...spec.attrs } as Record<
-			string,
-			unknown
-		>,
+		{
+			key,
+			className: className || undefined,
+			style,
+			...(editable ? { "data-note-index": spec.noteIndex } : {}),
+			...spec.attrs,
+		} as Record<string, unknown>,
 		spec.text,
 	);
 }
@@ -49,11 +66,17 @@ export function NotationCanvas({
 	chords,
 	style = "block",
 	animate = true,
+	selectedIndex = null,
+	onSelectNote,
 }: {
 	phrase: Phrase;
 	chords?: Chord[];
 	style?: AccompanimentStyle;
 	animate?: boolean;
+	/** Melody note to highlight, or null. */
+	selectedIndex?: number | null;
+	/** Called with the note index a click resolved to, or null for empty space. */
+	onSelectNote?: (index: number | null) => void;
 }) {
 	const specs = phraseToSVG(phrase, NOTATION_GEOM, chords, style);
 	// The viewBox grows to the bass staff only when there's harmony to engrave.
@@ -73,13 +96,32 @@ export function NotationCanvas({
 	const inkSpecs = specs.filter((s) => s.className !== "chord-symbol");
 	const chordSpecs = specs.filter((s) => s.className === "chord-symbol");
 
+	/**
+	 * Resolve a click to a melody note.
+	 *
+	 * Reads the index off the event target rather than attaching a handler per
+	 * glyph: the renderer stays a pure Phrase -> SVG function, and hit-testing
+	 * is entirely the React layer's business.
+	 */
+	const handleClick = (event: React.MouseEvent<SVGSVGElement>) => {
+		if (!onSelectNote) return;
+		const target = event.target as Element;
+		const owner = target.closest?.("[data-note-index]");
+		const raw = owner?.getAttribute("data-note-index");
+		const index = raw === null || raw === undefined ? null : Number(raw);
+		onSelectNote(index !== null && Number.isInteger(index) ? index : null);
+	};
+
 	return (
 		<svg
-			className="notation"
+			className={
+				onSelectNote ? "notation notation--editable" : "notation"
+			}
 			viewBox={`0 0 ${VIEW_W} ${viewH}`}
 			preserveAspectRatio="xMidYMid meet"
 			role="img"
 			aria-label="Your hummed melody, rendered as sheet music"
+			onClick={onSelectNote ? handleClick : undefined}
 		>
 			<defs>
 				<filter id="undertone-ink" x="-8%" y="-8%" width="116%" height="116%">
@@ -101,7 +143,7 @@ export function NotationCanvas({
 				filter="url(#undertone-ink)"
 			>
 				{inkSpecs.map((spec, i) =>
-					specToElement(spec, i, delayFor(spec.reveal)),
+					specToElement(spec, i, delayFor(spec.reveal), selectedIndex),
 				)}
 			</g>
 			{/* Chord symbols — crisp, no filter, but still participate in reveal */}

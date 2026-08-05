@@ -456,6 +456,156 @@ def main() -> int:
             nomidi.screenshot(path=str(SHOTS / "no-web-midi.png"), full_page=True)
             nomidi_ctx.close()
 
+            # --- Act 4: score editing --------------------------------------
+            print("\n=== ACT 4 — in-app score editing ===", flush=True)
+
+            ed = context.new_page()
+            ed_errors: list[str] = []
+            ed.on(
+                "console",
+                lambda m: ed_errors.append(m.text) if m.type == "error" else None,
+            )
+            # A share link gives a known score with no microphone involved.
+            ed.goto(f"{origin}/#score={share_payload}", wait_until="networkidle")
+            ed.wait_for_timeout(500)
+
+            def note_ys() -> list[float]:
+                """Vertical position of each notehead — pitch made observable."""
+                return ed.evaluate(
+                    "() => Array.from(document.querySelectorAll("
+                    "'.notation ellipse[data-note-index]'))"
+                    ".map(e => Number(e.getAttribute('cy')))"
+                )
+
+            baseline_ys = note_ys()
+            check(
+                "the editing toolbar appears for a score",
+                ed.get_by_role("toolbar", name="Edit the score").count() == 1,
+            )
+            check(
+                "noteheads are hit-testable",
+                len(baseline_ys) >= 4,
+                f"{len(baseline_ys)} addressable noteheads",
+            )
+
+            # Click a notehead: it must select, and only that note.
+            ed.locator(".notation ellipse[data-note-index]").first.click()
+            ed.wait_for_timeout(250)
+            check(
+                "clicking a notehead selects exactly one note",
+                ed.locator(".notation .is-selected").count() >= 1
+                and ed.evaluate(
+                    "() => new Set(Array.from(document.querySelectorAll("
+                    "'.notation .is-selected')).map(e => "
+                    "e.getAttribute('data-note-index'))).size"
+                )
+                == 1,
+            )
+
+            # Transpose up one step via the toolbar; the notehead must rise.
+            ed.get_by_role("button", name="Move the selected note up one step").click()
+            ed.wait_for_timeout(250)
+            after_up = note_ys()
+            check(
+                "transposing up moves the note higher on the staff",
+                after_up[0] < baseline_ys[0],
+                f"cy {baseline_ys[0]} -> {after_up[0]}",
+            )
+            check(
+                "transposing one note leaves the others where they were",
+                after_up[1:] == baseline_ys[1:],
+            )
+
+            # Undo must restore the prior score exactly.
+            ed.get_by_role("button", name="Undo the last edit").click()
+            ed.wait_for_timeout(250)
+            check("undo restores the score exactly", note_ys() == baseline_ys)
+
+            ed.get_by_role("button", name="Redo the last undone edit").click()
+            ed.wait_for_timeout(250)
+            check("redo re-applies the edit", note_ys() == after_up)
+
+            # Keyboard-only editing: focus the score region and drive it.
+            ed.get_by_role("button", name="Undo the last edit").click()
+            ed.wait_for_timeout(200)
+            ed.locator(".app__stage").focus()
+            # Escape first: a note is still selected from the click above, so
+            # ArrowRight would advance to the second note rather than pick the
+            # first. Clearing makes the sequence say what it means.
+            ed.keyboard.press("Escape")
+            ed.wait_for_timeout(150)
+            check(
+                "Escape clears the selection",
+                ed.locator(".notation .is-selected").count() == 0,
+            )
+            ed.keyboard.press("ArrowRight")  # select first note
+            ed.wait_for_timeout(150)
+            ed.keyboard.press("ArrowDown")  # transpose it down a step
+            ed.wait_for_timeout(300)
+            after_kbd = note_ys()
+            check(
+                "keyboard-only editing transposes the selected note",
+                after_kbd[0] > baseline_ys[0],
+                f"cy {baseline_ys[0]} -> {after_kbd[0]}",
+            )
+            check(
+                "keyboard editing leaves the unselected notes alone",
+                after_kbd[1:] == baseline_ys[1:],
+            )
+
+            # Deleting removes exactly one note.
+            before_delete = len(note_ys())
+            ed.keyboard.press("Delete")
+            ed.wait_for_timeout(300)
+            check(
+                "deleting removes exactly one note",
+                len(note_ys()) == before_delete - 1,
+                f"{before_delete} -> {len(note_ys())}",
+            )
+
+            # Adding a note puts one back.
+            ed.keyboard.press("Enter")
+            ed.wait_for_timeout(300)
+            check(
+                "adding a note lengthens the melody",
+                len(note_ys()) == before_delete,
+                f"{len(note_ys())} notes",
+            )
+
+            # The harmony beneath must track the edit, not go stale.
+            chord_labels = ed.evaluate(
+                "() => Array.from(document.querySelectorAll("
+                "'.notation__chords text')).map(e => e.textContent).join(',')"
+            )
+            check(
+                "the engraved harmony is present and re-derived after edits",
+                len(chord_labels) > 0,
+                chord_labels[:40],
+            )
+
+            # Edits must round-trip through persistence.
+            edited_ys = note_ys()
+            ed.fill("#library-name", "Edited score")
+            ed.get_by_role("button", name="Save", exact=True).click()
+            ed.wait_for_timeout(400)
+            ed.goto(origin, wait_until="networkidle")
+            ed.wait_for_timeout(400)
+            ed.get_by_role("button", name="Edited score").click()
+            ed.wait_for_timeout(500)
+            check(
+                "an edited score saves and reopens with the edits intact",
+                note_ys() == edited_ys,
+                f"{len(edited_ys)} notes",
+            )
+
+            check(
+                "no console errors while editing",
+                not ed_errors,
+                "; ".join(ed_errors[:3]),
+            )
+            ed.screenshot(path=str(SHOTS / "editing.png"), full_page=True)
+            ed.close()
+
             browser.close()
 
     finally:

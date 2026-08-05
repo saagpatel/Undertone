@@ -13,6 +13,15 @@ import { useCompositionLibrary } from "./hooks/useCompositionLibrary";
 import { useLatestCapture } from "./hooks/useLatestCapture";
 import { useMidiCapture } from "./hooks/useMidiCapture";
 import { usePlayback } from "./hooks/usePlayback";
+import { useScoreEditor } from "./hooks/useScoreEditor";
+import { ScoreEditorControls } from "./components/ScoreEditorControls";
+import {
+	deleteNote,
+	duplicateNoteAfter,
+	moveNoteInTime,
+	stepNoteValue,
+	transposeNote,
+} from "./dsp/edit";
 import { serializePhraseSVG } from "./notation/serialize";
 import { DEFAULT_COMPOSITION_NAME } from "./storage/config";
 import { exportComposition, importComposition } from "./storage/file";
@@ -50,6 +59,9 @@ export default function App() {
 	// switching inputs to reach the device picker never blanks a finished take.
 	const latest = useLatestCapture([mic, midi]);
 	const active = useActiveComposition(latest.phrase, latest.captureId);
+	// Editing layers on top of the active composition and never writes back, so
+	// the data flow stays one-way and the renderer stays pure.
+	const editor = useScoreEditor(active.composition);
 	const library = useCompositionLibrary();
 	const [notice, setNotice] = useState<string | null>(null);
 	const [shareError, setShareError] = useState<string | null>(null);
@@ -86,12 +98,18 @@ export default function App() {
 		if (inputSource === "midi" && midiSupported) void connectMidi();
 	}, [inputSource, midiSupported, connectMidi]);
 
-	const composition = active.composition;
+	// The edited score is what everything downstream sees: playback, engraving,
+	// SVG export, saving, and sharing all read the same composition.
+	const composition = editor.composition;
 	const hasNotes = !!composition && composition.phrase.notes.length > 0;
 
 	// Derive the harmonization from whichever score is on screen. The key rides
-	// with a loaded composition, so a restored score harmonizes exactly as it
-	// did when it was saved.
+	// with a loaded composition and is re-derived after each edit, so a restored
+	// score harmonizes as it was saved and an edited one tracks the change.
+	//
+	// Not debounced, contrary to the plan: `harmonize` is a pure synchronous pass
+	// over the melody, so re-running it per keystroke costs microseconds. A
+	// debounce would add visible lag to every edit to save nothing measurable.
 	const chords = useMemo(
 		() =>
 			composition && composition.key && composition.phrase.notes.length > 0
@@ -104,6 +122,133 @@ export default function App() {
 	const status = isCapturing ? "recording" : composition ? "done" : "idle";
 
 	const { load } = active;
+
+	// --- Editing -----------------------------------------------------------
+	// Every gesture is a pure Phrase -> Phrase function handed to the editor,
+	// which records history and re-derives the key. Nothing here mutates.
+
+	// Edits receive the selection and key when they run, not when they were
+	// built. Two arrow keys pressed quickly land in one React batch, and a
+	// handler holding a render-time selection would act on a stale one.
+	const { apply: applyEdit } = editor;
+
+	const handleTranspose = useCallback(
+		(steps: number) => {
+			applyEdit((phrase, index, key) =>
+				index === null || key === null
+					? phrase
+					: transposeNote(phrase, index, steps, key),
+			);
+		},
+		[applyEdit],
+	);
+
+	const handleChangeValue = useCallback(
+		(direction: 1 | -1) => {
+			applyEdit((phrase, index) =>
+				index === null ? phrase : stepNoteValue(phrase, index, direction),
+			);
+		},
+		[applyEdit],
+	);
+
+	const handleNudge = useCallback(
+		(beats: number) => {
+			applyEdit((phrase, index) =>
+				index === null ? phrase : moveNoteInTime(phrase, index, beats),
+			);
+		},
+		[applyEdit],
+	);
+
+	const handleDeleteNote = useCallback(() => {
+		applyEdit((phrase, index) =>
+			index === null ? phrase : deleteNote(phrase, index),
+		);
+	}, [applyEdit]);
+
+	const handleDuplicateNote = useCallback(() => {
+		applyEdit((phrase, index) => {
+			if (index === null) return phrase;
+			const { phrase: next, index: inserted } = duplicateNoteAfter(phrase, index);
+			return { phrase: next, selectIndex: inserted };
+		});
+	}, [applyEdit]);
+
+	/**
+	 * Keyboard editing. Bound to the focusable score region so the shortcuts
+	 * never fight the library's text inputs, and so keyboard-only editing is a
+	 * first-class path rather than a shadow of the toolbar.
+	 */
+	const handleScoreKeyDown = useCallback(
+		(event: React.KeyboardEvent) => {
+			if (!hasNotes) return;
+			const accel = event.metaKey || event.ctrlKey;
+
+			if (accel && event.key.toLowerCase() === "z") {
+				event.preventDefault();
+				if (event.shiftKey) editor.redo();
+				else editor.undo();
+				return;
+			}
+			if (accel) return;
+
+			switch (event.key) {
+				case "ArrowRight":
+					event.preventDefault();
+					if (event.shiftKey) handleNudge(1);
+					else editor.moveSelection(1);
+					return;
+				case "ArrowLeft":
+					event.preventDefault();
+					if (event.shiftKey) handleNudge(-1);
+					else editor.moveSelection(-1);
+					return;
+				case "ArrowUp":
+					event.preventDefault();
+					handleTranspose(event.shiftKey ? 7 : 1);
+					return;
+				case "ArrowDown":
+					event.preventDefault();
+					handleTranspose(event.shiftKey ? -7 : -1);
+					return;
+				case "[":
+					event.preventDefault();
+					handleChangeValue(-1);
+					return;
+				case "]":
+					event.preventDefault();
+					handleChangeValue(1);
+					return;
+				case "Enter":
+					event.preventDefault();
+					handleDuplicateNote();
+					return;
+				case "Delete":
+				case "Backspace":
+					event.preventDefault();
+					handleDeleteNote();
+					return;
+				case "Escape":
+					event.preventDefault();
+					editor.select(null);
+					return;
+				default:
+			}
+		},
+		[
+			hasNotes,
+			editor.undo,
+			editor.redo,
+			editor.moveSelection,
+			editor.select,
+			handleNudge,
+			handleTranspose,
+			handleChangeValue,
+			handleDuplicateNote,
+			handleDeleteNote,
+		],
+	);
 
 	// Share links: restore the score before the microphone is ever touched, so a
 	// shared composition opens on a device with no mic at all.
@@ -231,7 +376,17 @@ export default function App() {
 				<p className="app__tagline">Hum a melody — watch it reveal itself.</p>
 			</header>
 
-			<section className="app__stage">
+			{/* Focusable so the whole score is keyboard-editable. The shortcuts live
+			    here rather than on the document so they never fight the library's
+			    text inputs. */}
+			<section
+				className="app__stage"
+				tabIndex={hasNotes && !isCapturing ? 0 : -1}
+				role="group"
+				aria-label="Your score. Use the arrow keys to select and edit notes."
+				aria-describedby="editor-hint"
+				onKeyDown={isCapturing ? undefined : handleScoreKeyDown}
+			>
 				{isCapturing ? (
 					<PitchMeter pitch={pitch} />
 				) : composition ? (
@@ -240,6 +395,8 @@ export default function App() {
 							phrase={composition.phrase}
 							chords={chords}
 							style={style}
+							selectedIndex={editor.selectedIndex}
+							onSelectNote={editor.select}
 						/>
 					) : (
 						<p className="app__empty">
@@ -250,6 +407,24 @@ export default function App() {
 					<PitchMeter pitch={null} />
 				)}
 			</section>
+
+			{hasNotes && !isCapturing && (
+				<>
+					<ScoreEditorControls
+						editor={editor}
+						noteCount={composition?.phrase.notes.length ?? 0}
+						onTranspose={handleTranspose}
+						onChangeValue={handleChangeValue}
+						onDelete={handleDeleteNote}
+						onDuplicate={handleDuplicateNote}
+						onNudge={handleNudge}
+					/>
+					<p className="app__hint app__hint--editor" id="editor-hint">
+						Click a note, or focus the score and use ← → to select, ↑ ↓ to move
+						it by a step, [ ] for its length, Enter to add, Delete to remove.
+					</p>
+				</>
+			)}
 
 			<div className="app__controls">
 				<InputSourcePicker
