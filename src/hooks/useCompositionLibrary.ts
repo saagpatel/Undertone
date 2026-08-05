@@ -15,9 +15,14 @@ export interface CompositionLibrary {
 	isReady: boolean;
 	/** Last operation failure, cleared on the next successful operation. */
 	error: string | null;
-	save: (name: string, composition: Composition) => Promise<void>;
-	rename: (id: string, name: string) => Promise<void>;
-	remove: (id: string) => Promise<void>;
+	/**
+	 * Mutations resolve to whether the store actually accepted the change.
+	 * They never reject — the failure is reported through `error` — so callers
+	 * must check the returned flag before telling the user it worked.
+	 */
+	save: (name: string, composition: Composition) => Promise<boolean>;
+	rename: (id: string, name: string) => Promise<boolean>;
+	remove: (id: string) => Promise<boolean>;
 	load: (id: string) => Promise<CompositionRecord | null>;
 }
 
@@ -73,19 +78,21 @@ export function useCompositionLibrary(): CompositionLibrary {
 		async (
 			what: string,
 			operation: (store: CompositionStore) => Promise<void>,
-		): Promise<void> => {
+		): Promise<boolean> => {
 			const store = storeRef.current;
 			if (!store) {
 				setError("The composition library is not ready yet.");
-				return;
+				return false;
 			}
 			try {
 				await operation(store);
 				setRecords(await store.list());
 				setError(null);
+				return true;
 			} catch (problem) {
 				console.error(`Undertone: could not ${what}.`, problem);
 				setError(describe(problem));
+				return false;
 			}
 		},
 		[],

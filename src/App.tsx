@@ -159,7 +159,12 @@ export default function App() {
 
 	const handleSave = (name: string) => {
 		if (!composition || !hasNotes) return;
-		void library.save(name, composition).then(() => setNotice(`Saved "${name}".`));
+		// library.save never rejects — it reports failure through library.error —
+		// so the success message is gated on the returned flag. Announcing "Saved"
+		// after a failed save is the exact outcome this feature exists to prevent.
+		void library.save(name, composition).then((saved) => {
+			if (saved) setNotice(`Saved "${name}".`);
+		});
 	};
 
 	return (

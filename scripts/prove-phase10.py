@@ -315,6 +315,45 @@ def main() -> int:
                 "a bad link must not destroy the user's current work",
             )
 
+            # A failed save must not report success. An over-long name is a real,
+            # reachable rejection path through the actual UI. Return to the valid
+            # share link first so there is a score worth saving.
+            page.goto(f"{origin}/#score={share_payload}", wait_until="networkidle")
+            page.reload(wait_until="networkidle")
+            page.wait_for_timeout(500)
+            page.fill("#library-name", "x" * 200)
+            page.get_by_role("button", name="Save", exact=True).click()
+            page.wait_for_timeout(400)
+            body_after_failed_save = page.inner_text("body")
+            check(
+                "a rejected save surfaces an error",
+                "cannot exceed" in body_after_failed_save.lower(),
+                body_after_failed_save[-90:].replace("\n", " "),
+            )
+            check(
+                "a rejected save does NOT announce success",
+                'saved "' not in body_after_failed_save.lower(),
+            )
+            check(
+                "a rejected save adds nothing to the library",
+                "nothing saved yet" in body_after_failed_save.lower(),
+            )
+
+            # And the ordinary path still reports success.
+            page.fill("#library-name", "Good name")
+            page.get_by_role("button", name="Save", exact=True).click()
+            page.wait_for_timeout(400)
+            body_after_good_save = page.inner_text("body")
+            check(
+                "an accepted save announces success",
+                'saved "good name"' in body_after_good_save.lower(),
+            )
+            check(
+                "an accepted save appears in the library list",
+                page.get_by_role("button", name="Good name").count() >= 1,
+            )
+            page.screenshot(path=str(SHOTS / "library-saved.png"), full_page=True)
+
             # A genuine cold load needs a fresh page with no prior render.
             cold = context.new_page()
             cold.goto(f"{origin}/#score=!!!broken!!!", wait_until="networkidle")

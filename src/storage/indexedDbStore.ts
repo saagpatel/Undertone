@@ -1,9 +1,4 @@
-import {
-	DB_NAME,
-	DB_VERSION,
-	STORE_NAME,
-	UPDATED_AT_INDEX,
-} from "./config";
+import { DB_NAME, DB_VERSION, STORE_NAME } from "./config";
 import { byMostRecentlyUpdated, defaultNewId, normalizeName } from "./memoryStore";
 import type { StoreDeps } from "./memoryStore";
 import {
@@ -81,10 +76,12 @@ export function openDatabase(
 
 		request.onupgradeneeded = () => {
 			const db = request.result;
-			if (!db.objectStoreNames.contains(STORE_NAME)) {
-				const store = db.createObjectStore(STORE_NAME, { keyPath: "id" });
-				store.createIndex(UPDATED_AT_INDEX, UPDATED_AT_INDEX, { unique: false });
-			}
+			// No secondary index: `list()` reads every record and sorts in memory,
+			// which is the right shape for a personal library of tens of items.
+			// An index on updatedAt would cost a write on every save to serve an
+			// ordering the sort already provides.
+			if (!db.objectStoreNames.contains(STORE_NAME))
+				db.createObjectStore(STORE_NAME, { keyPath: "id" });
 		};
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () =>
