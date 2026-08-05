@@ -9,6 +9,13 @@ export interface Capture {
 	pitch: PitchResult | null;
 	/** Quantized phrase from the last stop; null until the first capture ends. */
 	phrase: Phrase | null;
+	/**
+	 * Increments once per completed capture. Consumers use this rather than the
+	 * identity of `phrase` to detect "the user just hummed something new" —
+	 * two takes can produce equal phrases, and equal phrases are still two
+	 * separate captures.
+	 */
+	captureId: number;
 	/** True while the mic is open and frames are being collected. */
 	isCapturing: boolean;
 	/** Mic / AudioContext error message, if any. */
@@ -28,6 +35,7 @@ export function useCapture(): Capture {
 	const audio = useAudioCapture();
 	const [pitch, setPitch] = useState<PitchResult | null>(null);
 	const [phrase, setPhrase] = useState<Phrase | null>(null);
+	const [captureId, setCaptureId] = useState(0);
 	const sessionRef = useRef<CaptureSession | null>(null);
 	const rafRef = useRef<number | null>(null);
 
@@ -68,13 +76,17 @@ export function useCapture(): Capture {
 		const session = sessionRef.current;
 		sessionRef.current = null;
 		audio.stop();
-		if (session) setPhrase(quantizePhrase(session.finish()));
+		if (session) {
+			setPhrase(quantizePhrase(session.finish()));
+			setCaptureId((previous) => previous + 1);
+		}
 		setPitch(null);
 	}, [audio.stop]);
 
 	return {
 		pitch,
 		phrase,
+		captureId,
 		isCapturing: audio.state === "running",
 		error: audio.error,
 		start,
