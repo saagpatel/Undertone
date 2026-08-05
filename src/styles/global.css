@@ -246,3 +246,184 @@ body {
 	font-size: 1.1rem;
 	color: var(--ink-soft);
 }
+
+/* ---------------------------------------------------------------- Library */
+/* Phase 10: the composition library, file I/O, and share-link surface. */
+
+.library {
+	width: min(100%, 46rem);
+	margin: 96px auto 0;
+	padding: 32px;
+	border-top: 1px solid var(--paper-shade);
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	text-align: left;
+}
+.library__head {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.library__title {
+	margin: 0;
+	font-family: var(--font-display);
+	font-weight: 300;
+	font-size: 1.5rem;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+}
+.library__notice {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--accent);
+	max-width: 60ch;
+}
+.library__label {
+	display: block;
+	margin-bottom: 8px;
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+.library__save-row,
+.library__rename,
+.library__files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+.library__input {
+	flex: 1 1 14rem;
+	min-height: 40px;
+	padding: 0 14px;
+	border: 1px solid var(--ink-soft);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-size: 1rem;
+}
+.library__input:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+.library__input:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+.ghost-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+.ghost-button:disabled:hover {
+	background: transparent;
+	color: var(--ink);
+	border-color: var(--ink-soft);
+}
+/* The import control is a styled label wrapping a hidden file input. */
+.library__import {
+	display: inline-flex;
+	align-items: center;
+	position: relative;
+}
+.library__import-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+}
+.library__import:focus-within {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+.library__error {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	color: var(--accent);
+}
+.library__empty {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	line-height: 1.6;
+	color: var(--ink-soft);
+	max-width: 60ch;
+}
+.library__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+.library__item {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--paper-shade);
+}
+.library__open {
+	flex: 1 1 16rem;
+	appearance: none;
+	border: 0;
+	background: transparent;
+	padding: 4px;
+	margin: -4px;
+	text-align: left;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	border-radius: 8px;
+}
+.library__open:hover .library__name {
+	color: var(--accent);
+}
+.library__open:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+.library__name {
+	font-family: var(--font-display);
+	font-size: 1.125rem;
+	color: var(--ink);
+	transition: color 160ms ease;
+}
+.library__meta {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--ink-soft);
+}
+.library__item-actions {
+	display: flex;
+	gap: 8px;
+}
+.library__item-actions .ghost-button,
+.library__files .ghost-button {
+	min-height: 36px;
+	padding: 0 14px;
+	font-size: 0.875rem;
+}
+
+@media (max-width: 40rem) {
+	.library {
+		padding: 24px 16px;
+		margin-top: 64px;
+	}
+	.library__item {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+}
