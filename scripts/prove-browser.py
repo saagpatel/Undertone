@@ -553,7 +553,37 @@ def main() -> int:
                 after_kbd[1:] == baseline_ys[1:],
             )
 
-            # Deleting removes exactly one note.
+            # Nudging in time re-sorts the melody. The selection must follow the
+            # note it moved, not stay on a position now holding a different one.
+            selected_before = ed.evaluate(
+                "() => document.querySelector('.notation ellipse.is-selected')?.getAttribute('cy')"
+            )
+            ed.get_by_role("button", name="Move the selected note later by one beat").click()
+            ed.wait_for_timeout(300)
+            selected_after = ed.evaluate(
+                "() => document.querySelector('.notation ellipse.is-selected')?.getAttribute('cy')"
+            )
+            check(
+                "the selection follows a note moved in time",
+                selected_before is not None and selected_after == selected_before,
+                f"cy {selected_before} -> {selected_after}",
+            )
+            check(
+                "moving in time still selects exactly one note",
+                ed.evaluate(
+                    "() => new Set(Array.from(document.querySelectorAll("
+                    "'.notation .is-selected')).map(e => "
+                    "e.getAttribute('data-note-index'))).size"
+                )
+                == 1,
+            )
+            ed.get_by_role("button", name="Undo the last edit").click()
+            ed.wait_for_timeout(250)
+
+            # Deleting removes exactly one note. Re-focus first: the toolbar
+            # clicks above moved focus off the score, and the shortcuts are
+            # deliberately scoped to the score region.
+            ed.locator(".app__stage").focus()
             before_delete = len(note_ys())
             ed.keyboard.press("Delete")
             ed.wait_for_timeout(300)

@@ -154,9 +154,17 @@ export default function App() {
 
 	const handleNudge = useCallback(
 		(beats: number) => {
-			applyEdit((phrase, index) =>
-				index === null ? phrase : moveNoteInTime(phrase, index, beats),
-			);
+			applyEdit((phrase, index) => {
+				if (index === null) return phrase;
+				// Moving re-sorts the melody, so the selection has to follow the note
+				// rather than stay on a position that now holds a different one.
+				const { phrase: next, index: moved } = moveNoteInTime(
+					phrase,
+					index,
+					beats,
+				);
+				return { phrase: next, selectIndex: moved };
+			});
 		},
 		[applyEdit],
 	);
@@ -378,13 +386,17 @@ export default function App() {
 
 			{/* Focusable so the whole score is keyboard-editable. The shortcuts live
 			    here rather than on the document so they never fight the library's
-			    text inputs. */}
+			    text inputs. The hint is only referenced when it is actually
+			    rendered — a dangling aria-describedby is a broken promise to a
+			    screen reader. */}
 			<section
 				className="app__stage"
 				tabIndex={hasNotes && !isCapturing ? 0 : -1}
 				role="group"
 				aria-label="Your score. Use the arrow keys to select and edit notes."
-				aria-describedby="editor-hint"
+				aria-describedby={
+					hasNotes && !isCapturing ? "editor-hint" : undefined
+				}
 				onKeyDown={isCapturing ? undefined : handleScoreKeyDown}
 			>
 				{isCapturing ? (

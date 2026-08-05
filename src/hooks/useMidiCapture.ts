@@ -18,8 +18,6 @@ export interface MidiDevice {
 export interface MidiCapture {
 	/** False when the browser has no Web MIDI API at all (Safari). */
 	isSupported: boolean;
-	/** True once access has been granted and inputs have been enumerated. */
-	isConnected: boolean;
 	devices: MidiDevice[];
 	selectedDeviceId: string | null;
 	selectDevice: (id: string) => void;
@@ -129,15 +127,6 @@ export function useMidiCapture(): MidiCapture {
 		const input = access.inputs.get(selectedDeviceId);
 		if (!input) return;
 
-		const handle = (event: MIDIMessageEvent) => {
-			if (!event.data) return;
-			const message = parseMidiMessage(event.data, now());
-			if (!message) return;
-
-			applyToMeter(message);
-			sessionRef.current?.push(message);
-		};
-
 		const applyToMeter = (message: MidiNoteMessage) => {
 			const held = heldRef.current;
 			if (message.kind === "on") {
@@ -155,8 +144,37 @@ export function useMidiCapture(): MidiCapture {
 			if (held.size === 0) setPitch(null);
 		};
 
+		const handle = (event: MIDIMessageEvent) => {
+			if (!event.data) return;
+			const message = parseMidiMessage(event.data, now());
+			if (!message) return;
+
+			applyToMeter(message);
+			sessionRef.current?.push(message);
+		};
+
 		input.addEventListener("midimessage", handle);
-		return () => input.removeEventListener("midimessage", handle);
+
+		// Open the port explicitly. A MIDIInput only delivers messages once it is
+		// open, and implementations differ on whether addEventListener opens it
+		// implicitly the way assigning onmidimessage does. Being explicit removes
+		// a whole class of "the keyboard is connected but no notes arrive".
+		let cancelled = false;
+		void input
+			.open()
+			.then(() => {
+				if (!cancelled) setError(null);
+			})
+			.catch((problem: unknown) => {
+				if (cancelled) return;
+				console.error("Undertone: could not open the MIDI input.", problem);
+				setError(describe(problem));
+			});
+
+		return () => {
+			cancelled = true;
+			input.removeEventListener("midimessage", handle);
+		};
 	}, [selectedDeviceId, devices]);
 
 	const start = useCallback(() => {
@@ -187,7 +205,6 @@ export function useMidiCapture(): MidiCapture {
 
 	return {
 		isSupported,
-		isConnected: accessRef.current !== null,
 		devices,
 		selectedDeviceId,
 		selectDevice: setSelectedDeviceId,
