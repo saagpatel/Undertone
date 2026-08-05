@@ -210,20 +210,26 @@ export function duplicateNoteAfter(
 	});
 }
 
-/** Shift a note along the timeline by whole beats, never before the start. */
+/**
+ * Shift a note along the timeline by whole beats, never before the start.
+ *
+ * Returns the note's new index as well as the phrase: moving a note re-sorts
+ * the melody, so its position changes. A caller that kept the old index would
+ * leave the selection pointing at a different note, and every edit after that
+ * would hit the wrong one.
+ */
 export function moveNoteInTime(
 	phrase: Phrase,
 	index: number,
 	beats: number,
-): Phrase {
+): { phrase: Phrase; index: number } {
 	const note = phrase.notes[index];
-	if (!note || beats === 0) return phrase;
+	if (!note || beats === 0) return { phrase, index };
 	const beatPosition = Math.max(0, note.beatPosition + beats);
-	if (beatPosition === note.beatPosition) return phrase;
+	if (beatPosition === note.beatPosition) return { phrase, index };
 
 	const moved = { ...note, beatPosition };
-	const without = deleteNote(phrase, index);
-	return insertNote(without, moved).phrase;
+	return insertNote(deleteNote(phrase, index), moved);
 }
 
 /** Replace one note, leaving every other note identical. */

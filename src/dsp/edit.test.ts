@@ -291,29 +291,41 @@ describe("duplicateNoteAfter", () => {
 
 describe("moveNoteInTime", () => {
 	it("shifts a note later and keeps the melody ordered", () => {
-		const after = moveNoteInTime(trio(), 0, 5);
-		expect(after.notes.map((n) => n.beatPosition)).toEqual([1, 2, 5]);
-		expect(after.notes[2].pitch).toBe("C");
+		const { phrase } = moveNoteInTime(trio(), 0, 5);
+		expect(phrase.notes.map((n) => n.beatPosition)).toEqual([1, 2, 5]);
+		expect(phrase.notes[2].pitch).toBe("C");
 	});
 
 	it("shifts a note earlier", () => {
 		// G lands on beat 0 alongside C, and a same-beat note sorts after the one
 		// already there, so the melody reads C G E.
-		const after = moveNoteInTime(trio(), 2, -2);
-		expect(after.notes.map((n) => n.pitch)).toEqual(["C", "G", "E"]);
-		expect(after.notes.map((n) => n.beatPosition)).toEqual([0, 0, 1]);
+		const { phrase } = moveNoteInTime(trio(), 2, -2);
+		expect(phrase.notes.map((n) => n.pitch)).toEqual(["C", "G", "E"]);
+		expect(phrase.notes.map((n) => n.beatPosition)).toEqual([0, 0, 1]);
+	});
+
+	it("reports where the moved note ended up", () => {
+		// Moving re-sorts the melody. A caller that kept the old index would be
+		// pointing at a different note, and every later edit would hit that one.
+		const moved = moveNoteInTime(trio(), 0, 5);
+		expect(moved.index).toBe(2);
+		expect(moved.phrase.notes[moved.index].pitch).toBe("C");
+
+		const back = moveNoteInTime(trio(), 2, -2);
+		expect(back.phrase.notes[back.index].pitch).toBe("G");
 	});
 
 	it("never moves a note before the start of the phrase", () => {
-		const after = moveNoteInTime(trio(), 0, -5);
-		expect(after.notes[0].beatPosition).toBe(0);
+		const { phrase } = moveNoteInTime(trio(), 0, -5);
+		expect(phrase.notes[0].beatPosition).toBe(0);
 	});
 
-	it("returns the same phrase when the move changes nothing", () => {
+	it("returns the same phrase and index when the move changes nothing", () => {
 		const before = trio();
-		expect(moveNoteInTime(before, 0, 0)).toBe(before);
-		expect(moveNoteInTime(before, 0, -3)).toBe(before);
-		expect(moveNoteInTime(before, 99, 1)).toBe(before);
+		expect(moveNoteInTime(before, 0, 0).phrase).toBe(before);
+		expect(moveNoteInTime(before, 0, -3).phrase).toBe(before);
+		expect(moveNoteInTime(before, 99, 1).phrase).toBe(before);
+		expect(moveNoteInTime(before, 1, 0).index).toBe(1);
 	});
 
 	it("never mutates the input phrase", () => {
