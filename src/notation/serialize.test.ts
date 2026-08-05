@@ -164,3 +164,36 @@ describe("serializePhraseSVG with chords", () => {
 		expect(doc.documentElement.nodeName).toBe("svg");
 	});
 });
+
+describe("export presentation for Phase 9 glyphs", () => {
+	it("inlines a stroke on barlines so they show in the bare file", () => {
+		const out = serializeElement({
+			kind: "line",
+			attrs: { x1: 0, y1: 0, x2: 0, y2: 10 },
+			className: "barline",
+		});
+		expect(out).toContain('stroke="#1a1208"');
+		expect(out).toContain('stroke-width="1.6"');
+	});
+
+	it("doubles the stroke weight on the final barline", () => {
+		const out = serializeElement({
+			kind: "line",
+			attrs: { x1: 0, y1: 0, x2: 0, y2: 10 },
+			className: "barline barline--final",
+		});
+		expect(out).toContain('stroke-width="4"');
+	});
+
+	it("inlines a fill on time-sig digits (else invisible under g fill=none)", () => {
+		const out = serializeElement({
+			kind: "text",
+			text: "4",
+			attrs: { x: 0, y: 0, fontSize: 20, fill: "currentColor" },
+			className: "time-sig",
+		});
+		expect(out).toContain('fill="#1a1208"'); // currentColor pinned to ink
+		expect(out).toContain('font-size="20"');
+		expect(out).toContain(">4</text>");
+	});
+});

@@ -11,7 +11,8 @@
 .notation .ledger-line,
 .notation .stem,
 .notation .beam,
-.notation .accidental {
+.notation .accidental,
+.notation .barline {
 	stroke: var(--ink);
 	stroke-linecap: round;
 	fill: none;
@@ -20,6 +21,24 @@
 .notation .staff-line,
 .notation .ledger-line {
 	stroke-width: 1.4;
+}
+
+/* Barlines (Phase 9): thin internal/final lines; the final barline is doubled
+   with a heavier stroke for the hand-scored "end" weight. */
+.notation .barline {
+	stroke-width: 1.6;
+}
+
+.notation .barline--final {
+	stroke-width: 4;
+}
+
+/* The time signature (Phase 9): serif digits, like the chord symbols, sized via
+   the per-element fontSize attribute so the canvas and export agree. */
+.notation .time-sig {
+	fill: var(--ink);
+	font-family: Georgia, Palatino, "Palatino Linotype", "Book Antiqua", serif;
+	font-weight: 500;
 }
 
 .notation .stem {
@@ -75,7 +94,9 @@
 .notation__ink--animate .staff-line,
 .notation__ink--animate .clef,
 .notation__ink--animate .clef-dot,
-.notation__ink--animate .brace {
+.notation__ink--animate .brace,
+.notation__ink--animate .barline,
+.notation__ink--animate .time-sig {
 	animation: ut-fade 420ms ease-out both;
 }
 
@@ -122,6 +143,8 @@
 	.notation__ink--animate .clef,
 	.notation__ink--animate .clef-dot,
 	.notation__ink--animate .brace,
+	.notation__ink--animate .barline,
+	.notation__ink--animate .time-sig,
 	.notation__ink--animate .notehead,
 	.notation__ink--animate .stem,
 	.notation__ink--animate .beam,
