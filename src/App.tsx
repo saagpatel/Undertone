@@ -53,23 +53,38 @@ export default function App() {
 
 	const { load } = active;
 
-	// Cold load from a share link: restore the score before the microphone is
-	// ever touched, so a shared composition opens on a device with no mic at all.
+	// Share links: restore the score before the microphone is ever touched, so a
+	// shared composition opens on a device with no mic at all.
+	//
+	// This listens for `hashchange` as well as running on mount. Pasting a share
+	// link into an address bar that already has Undertone open is a same-document
+	// navigation — the app never remounts — so a mount-only effect would leave
+	// the previous score on screen and look broken.
 	useEffect(() => {
-		try {
-			const shared = restoreFromHash(window.location.hash);
-			if (shared) {
+		const applyHash = () => {
+			try {
+				const shared = restoreFromHash(window.location.hash);
+				if (!shared) return;
 				load(shared);
+				setShareError(null);
 				setNotice("Opened a shared score. Save it to keep it.");
+			} catch (problem) {
+				console.error(
+					"Undertone: could not read the score in this link.",
+					problem,
+				);
+				setNotice(null);
+				setShareError(
+					problem instanceof CodecError
+						? "This share link is damaged — the score in it could not be read."
+						: "This share link could not be opened.",
+				);
 			}
-		} catch (problem) {
-			console.error("Undertone: could not read the score in this link.", problem);
-			setShareError(
-				problem instanceof CodecError
-					? "This share link is damaged — the score in it could not be read."
-					: "This share link could not be opened.",
-			);
-		}
+		};
+
+		applyHash();
+		window.addEventListener("hashchange", applyHash);
+		return () => window.removeEventListener("hashchange", applyHash);
 	}, [load]);
 
 	const handleExportSVG = () => {
