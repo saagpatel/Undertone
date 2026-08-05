@@ -110,7 +110,11 @@ export function phraseToSVG(
 			});
 		}
 
-		for (const spec of noteSpecs) spec.reveal = index;
+		for (const spec of noteSpecs) {
+			spec.reveal = index;
+			// Melody glyphs only: this is what the editor hit-tests against.
+			spec.noteIndex = index;
+		}
 		specs.push(...noteSpecs);
 	});
 

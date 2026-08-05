@@ -561,3 +561,36 @@ body {
 	line-height: 1.5;
 	color: var(--accent);
 }
+
+/* ---------------------------------------------------------------- Editing */
+/* Phase 12: the score becomes an editable surface. Selection lives in the
+   React layer; the renderer stays a pure Phrase -> SVG function. */
+
+.app__stage:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 8px;
+	border-radius: 12px;
+}
+.editor {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px 16px;
+	max-width: 46rem;
+	margin: 0 auto;
+}
+.editor__group {
+	display: inline-flex;
+	gap: 6px;
+}
+.editor .ghost-button {
+	min-height: 34px;
+	padding: 0 12px;
+	font-size: 0.875rem;
+}
+.app__hint--editor {
+	max-width: 52ch;
+	margin: 0 auto;
+	text-align: center;
+	line-height: 1.6;
+}

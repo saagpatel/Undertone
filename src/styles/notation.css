@@ -181,3 +181,25 @@
 		opacity: 1;
 	}
 }
+
+/* Phase 12 selection: the selected note's glyphs take the accent ink so the
+   whole note reads as one selected object, not just its head. */
+.notation--editable [data-note-index] {
+	cursor: pointer;
+}
+.notation .is-selected {
+	stroke: var(--accent);
+	color: var(--accent);
+}
+.notation ellipse.is-selected {
+	fill: var(--accent);
+	stroke: var(--accent);
+}
+.notation ellipse.is-selected.notehead--open {
+	fill: none;
+}
+.notation path.is-selected,
+.notation text.is-selected {
+	fill: var(--accent);
+	stroke: var(--accent);
+}
