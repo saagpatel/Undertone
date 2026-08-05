@@ -9,7 +9,7 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 - Procedural SVG — pure-TS notation renderer (staff, clefs, noteheads, stems, beams, barlines, time signatures)
 - IndexedDB — composition library, with an in-memory fallback when storage is blocked
 - Vitest — unit tests (pitch math, quantization, SVG layout, codec, storage)
-- Playwright (Python) — `scripts/prove-phase10.py` drives real Chromium for what jsdom cannot cover: real IndexedDB, and the zero-network invariant on the production build
+- Playwright (Python) — `scripts/prove-browser.py` drives real Chromium for what jsdom cannot cover: real IndexedDB, the zero-network invariant on the production build, and Web MIDI feature detection
 
 ## Development Conventions
 - Strict TypeScript: no `any`, `unknown` + narrowing preferred; string-literal unions over enums.
@@ -90,7 +90,7 @@ pnpm dev                                # http://localhost:5173
 pnpm test                               # vitest
 pnpm tsc --noEmit                       # typecheck
 pnpm build                              # production bundle
-pnpm build && python3 scripts/prove-phase10.py   # real-browser checks + screenshots
+pnpm build && python3 scripts/prove-browser.py   # real-browser checks + screenshots
 ```
 
 ## Known Risks

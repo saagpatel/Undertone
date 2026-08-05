@@ -471,3 +471,93 @@ body {
 		align-items: flex-start;
 	}
 }
+
+/* ----------------------------------------------------------- Input source */
+/* Phase 11: microphone / MIDI toggle and device picker. Shares the pill
+   treatment with the Phase 8 accompaniment selector so the controls read as
+   one family rather than two conventions. */
+
+.input-source {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+.input-source__toggle {
+	display: inline-flex;
+	border: 1px solid var(--ink-soft);
+	border-radius: 999px;
+	overflow: hidden;
+}
+.input-source__option {
+	appearance: none;
+	min-height: 36px;
+	padding: 0 16px;
+	border: none;
+	border-left: 1px solid var(--ink-soft);
+	background: transparent;
+	color: var(--ink-soft);
+	font-family: var(--font-display);
+	font-size: 0.9375rem;
+	cursor: pointer;
+	transition:
+		background 160ms ease,
+		color 160ms ease;
+}
+.input-source__option:first-child {
+	border-left: none;
+}
+.input-source__option.is-selected {
+	background: var(--accent);
+	color: var(--paper);
+}
+.input-source__option:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+.input-source__option:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+.input-source__midi {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+}
+.input-source__device {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+.input-source__device-label {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+.input-source__select {
+	min-height: 36px;
+	padding: 0 12px;
+	border: 1px solid var(--ink-soft);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-size: 0.9375rem;
+	cursor: pointer;
+}
+.input-source__select:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+.input-source__error {
+	margin: 0;
+	max-width: 42ch;
+	text-align: center;
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--accent);
+}

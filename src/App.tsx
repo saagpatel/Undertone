@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaptureButton } from "./components/CaptureButton";
+import { InputSourcePicker } from "./components/InputSourcePicker";
+import type { InputSource } from "./components/InputSourcePicker";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
@@ -8,6 +10,8 @@ import { harmonize } from "./dsp/harmony";
 import { useActiveComposition } from "./hooks/useActiveComposition";
 import { useCapture } from "./hooks/useCapture";
 import { useCompositionLibrary } from "./hooks/useCompositionLibrary";
+import { useLatestCapture } from "./hooks/useLatestCapture";
+import { useMidiCapture } from "./hooks/useMidiCapture";
 import { usePlayback } from "./hooks/usePlayback";
 import { serializePhraseSVG } from "./notation/serialize";
 import { DEFAULT_COMPOSITION_NAME } from "./storage/config";
@@ -38,12 +42,49 @@ const STYLE_OPTIONS: ReadonlyArray<{
 ];
 
 export default function App() {
-	const { pitch, phrase, captureId, isCapturing, error, start, stop } =
-		useCapture();
-	const active = useActiveComposition(phrase, captureId);
+	const mic = useCapture();
+	const midi = useMidiCapture();
+	const [inputSource, setInputSource] = useState<InputSource>("mic");
+
+	// Whichever modality performed most recently owns the score on screen, so
+	// switching inputs to reach the device picker never blanks a finished take.
+	const latest = useLatestCapture([mic, midi]);
+	const active = useActiveComposition(latest.phrase, latest.captureId);
 	const library = useCompositionLibrary();
 	const [notice, setNotice] = useState<string | null>(null);
 	const [shareError, setShareError] = useState<string | null>(null);
+
+	// The armed input owns the transport and the live meter.
+	const armed = inputSource === "midi" ? midi : mic;
+	const isCapturing = armed.isCapturing;
+	const pitch = armed.pitch;
+	// Only microphone errors surface here. MIDI failures are reported by
+	// InputSourcePicker, right beside the device controls that caused them —
+	// showing them in both places says the same thing twice.
+	const error = mic.error;
+
+	const start = useCallback(() => {
+		if (inputSource === "midi") {
+			midi.start();
+			return;
+		}
+		void mic.start();
+	}, [inputSource, midi.start, mic.start]);
+
+	const stop = useCallback(() => {
+		if (inputSource === "midi") {
+			midi.stop();
+			return;
+		}
+		mic.stop();
+	}, [inputSource, midi.stop, mic.stop]);
+
+	// Ask for MIDI access the moment the user arms that input, so the device
+	// picker is populated before they reach for the keyboard.
+	const { isSupported: midiSupported, connect: connectMidi } = midi;
+	useEffect(() => {
+		if (inputSource === "midi" && midiSupported) void connectMidi();
+	}, [inputSource, midiSupported, connectMidi]);
 
 	const composition = active.composition;
 	const hasNotes = !!composition && composition.phrase.notes.length > 0;
@@ -211,6 +252,13 @@ export default function App() {
 			</section>
 
 			<div className="app__controls">
+				<InputSourcePicker
+					source={inputSource}
+					onSelect={setInputSource}
+					midi={midi}
+					disabled={isCapturing}
+				/>
+
 				<CaptureButton status={status} onStart={start} onStop={stop} />
 
 				{hasNotes && (
