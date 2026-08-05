@@ -65,6 +65,12 @@ export default function App() {
 	const library = useCompositionLibrary();
 	const [notice, setNotice] = useState<string | null>(null);
 	const [shareError, setShareError] = useState<string | null>(null);
+	// Which library record the score on screen came from, so "Save changes" can
+	// overwrite it instead of piling up near-duplicate copies.
+	const [openRecord, setOpenRecord] = useState<{
+		id: string;
+		name: string;
+	} | null>(null);
 
 	// The armed input owns the transport and the live meter.
 	const armed = inputSource === "midi" ? midi : mic;
@@ -122,6 +128,11 @@ export default function App() {
 	const status = isCapturing ? "recording" : composition ? "done" : "idle";
 
 	const { load } = active;
+
+	// A fresh take is a new piece of music, not an edit of the one you opened.
+	useEffect(() => {
+		setOpenRecord(null);
+	}, [latest.captureId]);
 
 	// --- Editing -----------------------------------------------------------
 	// Every gesture is a pure Phrase -> Phrase function handed to the editor,
@@ -271,6 +282,7 @@ export default function App() {
 				const shared = restoreFromHash(window.location.hash);
 				if (!shared) return;
 				load(shared);
+				setOpenRecord(null);
 				setShareError(null);
 				setNotice("Opened a shared score. Save it to keep it.");
 			} catch (problem) {
@@ -326,6 +338,7 @@ export default function App() {
 					await file.text(),
 				);
 				load(imported);
+				setOpenRecord(null);
 				setShareError(null);
 				setNotice(`Opened "${name}" from a file.`);
 			} catch (problem) {
@@ -363,8 +376,16 @@ export default function App() {
 		const record = await library.load(id);
 		if (!record) return;
 		load(record.composition);
+		setOpenRecord({ id: record.id, name: record.name });
 		setShareError(null);
 		setNotice(`Opened "${record.name}".`);
+	};
+
+	const handleSaveOver = (id: string) => {
+		if (!composition || !hasNotes) return;
+		void library.saveOver(id, composition).then((saved) => {
+			if (saved) setNotice(`Saved changes to "${openRecord?.name ?? "it"}".`);
+		});
 	};
 
 	const handleSave = (name: string) => {
@@ -373,7 +394,11 @@ export default function App() {
 		// so the success message is gated on the returned flag. Announcing "Saved"
 		// after a failed save is the exact outcome this feature exists to prevent.
 		void library.save(name, composition).then((saved) => {
-			if (saved) setNotice(`Saved "${name}".`);
+			if (!saved) return;
+			// A new record now owns this score, but its id is not returned here,
+			// so drop the old association rather than point at the wrong record.
+			setOpenRecord(null);
+			setNotice(`Saved "${name}".`);
 		});
 	};
 
@@ -520,7 +545,10 @@ export default function App() {
 				kind={library.kind}
 				error={library.error}
 				canSave={hasNotes}
+				openRecord={openRecord}
+				hasUnsavedEdits={editor.isEdited}
 				onSave={handleSave}
+				onSaveOver={handleSaveOver}
 				onOpen={handleOpenSaved}
 				onRename={(id, name) => void library.rename(id, name)}
 				onDelete={(id) => void library.remove(id)}

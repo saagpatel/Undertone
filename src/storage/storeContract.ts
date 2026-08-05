@@ -112,6 +112,52 @@ export function describeCompositionStore(
 		});
 	});
 
+	it("saves over an existing composition, keeping its identity", async () => {
+		await withStore(async (store) => {
+			const saved = await store.save("Working take", sampleComposition(1));
+			const replacement = sampleComposition(9);
+			const updated = await store.update(saved.id, replacement);
+
+			expect(updated.id).toBe(saved.id);
+			expect(updated.name).toBe("Working take");
+			expect(updated.createdAt).toBe(saved.createdAt);
+			expect(updated.composition).toEqual(replacement);
+		});
+	});
+
+	it("saving over replaces rather than adding a record", async () => {
+		await withStore(async (store) => {
+			const saved = await store.save("Only one", sampleComposition(1));
+			await store.update(saved.id, sampleComposition(2));
+
+			const records = await store.list();
+			expect(records).toHaveLength(1);
+			expect(records[0].composition).toEqual(sampleComposition(2));
+		});
+	});
+
+	it("saving over an unknown id reports it instead of creating a record", async () => {
+		await withStore(async (store) => {
+			await expect(
+				store.update("ghost", sampleComposition()),
+			).rejects.toThrow(RecordNotFoundError);
+			expect(await store.list()).toEqual([]);
+		});
+	});
+
+	it("does not alias the caller's composition when saving over", async () => {
+		await withStore(async (store) => {
+			const saved = await store.save("Guarded", sampleComposition(1));
+			const replacement = sampleComposition(2);
+			await store.update(saved.id, replacement);
+
+			replacement.phrase.notes[0].pitch = "B";
+
+			const loaded = await store.load(saved.id);
+			expect(loaded?.composition.phrase.notes[0].pitch).toBe("C");
+		});
+	});
+
 	it("renames an existing composition without touching its music", async () => {
 		await withStore(async (store) => {
 			const composition = sampleComposition(7);

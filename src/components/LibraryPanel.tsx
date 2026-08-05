@@ -7,7 +7,12 @@ interface LibraryPanelProps {
 	error: string | null;
 	/** True when there is a score on screen worth saving. */
 	canSave: boolean;
+	/** The library record the score on screen came from, if any. */
+	openRecord: { id: string; name: string } | null;
+	/** True when the score has been edited since it was opened. */
+	hasUnsavedEdits: boolean;
 	onSave: (name: string) => void;
+	onSaveOver: (id: string) => void;
 	onOpen: (id: string) => void;
 	onRename: (id: string, name: string) => void;
 	onDelete: (id: string) => void;
@@ -35,7 +40,10 @@ export function LibraryPanel({
 	kind,
 	error,
 	canSave,
+	openRecord,
+	hasUnsavedEdits,
 	onSave,
+	onSaveOver,
 	onOpen,
 	onRename,
 	onDelete,
@@ -45,6 +53,10 @@ export function LibraryPanel({
 	const [draftName, setDraftName] = useState("");
 	const [renamingId, setRenamingId] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
+	/** Record awaiting delete confirmation, if any. */
+	const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+		null,
+	);
 
 	const submitSave = (event: React.FormEvent) => {
 		event.preventDefault();
@@ -99,6 +111,24 @@ export function LibraryPanel({
 					</button>
 				</div>
 			</form>
+
+			{openRecord && (
+				<div className="library__open-record">
+					<p className="library__open-label">
+						{hasUnsavedEdits
+							? `Edited since you opened "${openRecord.name}".`
+							: `Showing "${openRecord.name}".`}
+					</p>
+					<button
+						className="ghost-button"
+						type="button"
+						disabled={!canSave || !hasUnsavedEdits}
+						onClick={() => onSaveOver(openRecord.id)}
+					>
+						Save changes
+					</button>
+				</div>
+			)}
 
 			<div className="library__files">
 				<button
@@ -166,6 +196,39 @@ export function LibraryPanel({
 										Cancel
 									</button>
 								</form>
+							) : confirmingDeleteId === record.id ? (
+								// Deleting is the one irreversible action in an app built
+								// around not losing work, so it asks first. Inline rather
+								// than a native confirm(), which cannot be styled, tested,
+								// or relied on to read consistently.
+								<div
+									className="library__confirm"
+									role="alertdialog"
+									aria-label={`Delete ${record.name}?`}
+								>
+									<p className="library__confirm-text">
+										Delete "{record.name}" for good?
+									</p>
+									<div className="library__item-actions">
+										<button
+											className="ghost-button ghost-button--danger"
+											type="button"
+											onClick={() => {
+												onDelete(record.id);
+												setConfirmingDeleteId(null);
+											}}
+										>
+											Delete for good
+										</button>
+										<button
+											className="ghost-button"
+											type="button"
+											onClick={() => setConfirmingDeleteId(null)}
+										>
+											Keep it
+										</button>
+									</div>
+								</div>
 							) : (
 								<>
 									<button
@@ -193,7 +256,7 @@ export function LibraryPanel({
 										<button
 											className="ghost-button"
 											type="button"
-											onClick={() => onDelete(record.id)}
+											onClick={() => setConfirmingDeleteId(record.id)}
 										>
 											Delete
 										</button>

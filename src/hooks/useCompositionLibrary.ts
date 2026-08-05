@@ -21,6 +21,8 @@ export interface CompositionLibrary {
 	 * must check the returned flag before telling the user it worked.
 	 */
 	save: (name: string, composition: Composition) => Promise<boolean>;
+	/** Overwrite an existing record's music, keeping its id and name. */
+	saveOver: (id: string, composition: Composition) => Promise<boolean>;
 	rename: (id: string, name: string) => Promise<boolean>;
 	remove: (id: string) => Promise<boolean>;
 	load: (id: string) => Promise<CompositionRecord | null>;
@@ -106,6 +108,14 @@ export function useCompositionLibrary(): CompositionLibrary {
 		[run],
 	);
 
+	const saveOver = useCallback(
+		(id: string, composition: Composition) =>
+			run("save over this composition", (store) =>
+				store.update(id, composition).then(() => undefined),
+			),
+		[run],
+	);
+
 	const rename = useCallback(
 		(id: string, name: string) =>
 			run("rename this composition", (store) =>
@@ -133,5 +143,15 @@ export function useCompositionLibrary(): CompositionLibrary {
 		}
 	}, []);
 
-	return { records, kind, isReady: kind !== null, error, save, rename, remove, load };
+	return {
+		records,
+		kind,
+		isReady: kind !== null,
+		error,
+		save,
+		saveOver,
+		rename,
+		remove,
+		load,
+	};
 }
