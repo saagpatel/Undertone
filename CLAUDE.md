@@ -25,17 +25,24 @@ This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP pl
 Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architecture.
 
 ## Current Phase
-**v3 · Phase 11: MIDI Input (Web MIDI API) — next.**
+**v3 · Phase 12: In-App Score Editing — next, and the last of v3.**
 
 On `main` as of 2026-08-04: v1 (Phases 0–3), v2 (Phases 4–6), and v3 Phases 7 (chromatic harmony),
-8 (accompaniment textures), 9 (barlines + time signature), and 10 (local persistence, share links,
-file I/O). 277 vitest tests plus 30 browser checks, all green.
+8 (accompaniment textures), 9 (barlines + time signature), 10 (local persistence, share links, file
+I/O), and 11 (MIDI keyboard input). 307 vitest tests plus 40 browser checks, all green.
 
 Phases 7–9 were written 2026-06-19 and sat unmerged on branches until 2026-08-04; they are landed
-now, so `main` is the single source of truth again. Phase 12 remains unbuilt.
+now, so `main` is the single source of truth again.
 
-Note for Phase 11: Safari does not ship Web MIDI, so that phase is Chrome/Edge only. The roadmap
-already requires feature detection and a hidden toggle; it just does not say the limitation out loud.
+Two standing caveats:
+- **Web MIDI is Chrome/Edge only** — Safari does not ship it. `InputSourcePicker` renders nothing
+  when it is absent, and the microphone path is unaffected. Verified both ways in the browser harness.
+- **MIDI capture has never been exercised with physical hardware.** The reducer in `src/dsp/midi.ts`
+  is exhaustively unit-tested and feature detection is browser-proven, but no keyboard has played
+  into it. Test with a real device before treating that path as proven.
+
+Phase 12 must respect the locked decision below: the SVG renderer stays a pure `Phrase → SVG`
+function, so editing maps interactions to a new immutable `Phrase` in the React layer.
 
 See IMPLEMENTATION-ROADMAP.md (the "v3 — Depth, Input, Editing & Persistence" section) for full phase details.
 
@@ -68,9 +75,10 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 
 ## Current State
 
-**v3 · Phase 10 complete; Phase 11 (MIDI input) is next.** Capture, notation, playback, SVG export,
-key detection, diatonic and chromatic harmony, accompaniment textures, measure structure, and local
-persistence with share links are all on `main`. 277 vitest tests plus 30 browser checks, green.
+**v3 · Phase 11 complete; Phase 12 (in-app score editing) is next and closes v3.** Capture from
+microphone or MIDI keyboard, notation, playback, SVG export, key detection, diatonic and chromatic
+harmony, accompaniment textures, measure structure, and local persistence with share links are all
+on `main`. 307 vitest tests plus 40 browser checks, green.
 
 See IMPLEMENTATION-ROADMAP.md for full phase details.
 
@@ -101,9 +109,8 @@ pnpm build && python3 scripts/prove-browser.py   # real-browser checks + screens
 
 ## Next Recommended Move
 
-Build **v3 Phase 11: MIDI input** — Web MIDI capture converted to the same `NoteEvent` stream the
-pitch detector emits, so `quantize`, `detectKey`, `harmonize`, and the renderer are reused
-unchanged. Feature-detect and hide the toggle where Web MIDI is absent (Safari), leaving the mic
-path unaffected.
+Build **v3 Phase 12: in-app score editing** — map interactions to a new immutable `Phrase` in the
+React layer, never as a renderer mutation. Before that, exercise the Phase 11 MIDI path with a
+physical keyboard; it is unit-tested and feature-detected but has never seen real hardware.
 
 <!-- portfolio-context:end -->
