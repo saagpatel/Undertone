@@ -18,9 +18,6 @@ export const DB_VERSION = 1;
 /** Object store holding one record per saved composition. */
 export const STORE_NAME = "compositions";
 
-/** Index over `updatedAt` so `list()` can read in most-recent-first order. */
-export const UPDATED_AT_INDEX = "updatedAt";
-
 /**
  * Codec format version, written as the first byte of every encoded payload.
  * A decoder that meets an unknown version throws rather than guessing.
@@ -48,6 +45,14 @@ export const BPM_SCALE = 100;
  */
 export const MIN_OCTAVE = 0;
 export const MAX_OCTAVE = 9;
+
+/**
+ * Largest value the varint encoder can represent correctly. JavaScript's
+ * bitwise operators coerce to int32, so values at or above 2^31 would encode
+ * to silently wrong bytes. The codec refuses them rather than emitting a
+ * payload that decodes without complaint into the wrong music.
+ */
+export const MAX_VARINT = 2 ** 31 - 1;
 
 /** `location.hash` key carrying an encoded composition on a share link. */
 export const SHARE_HASH_KEY = "score";

@@ -10,6 +10,7 @@ import {
 	BPM_SCALE,
 	CODEC_VERSION,
 	MAX_OCTAVE,
+	MAX_VARINT,
 	MIN_OCTAVE,
 } from "./config";
 import { CodecError } from "./types";
@@ -108,6 +109,13 @@ class ByteWriter {
 		if (!Number.isInteger(value) || value < 0)
 			throw new CodecError(
 				`${label} must be a non-negative integer, got ${value}.`,
+			);
+		// `&` coerces to int32, so anything at or above 2^31 would encode to
+		// silently wrong bytes. Refuse it instead: a corrupt payload that decodes
+		// without complaint is worse than a rejected one.
+		if (value > MAX_VARINT)
+			throw new CodecError(
+				`${label} is too large to encode: ${value} exceeds ${MAX_VARINT}.`,
 			);
 		let remaining = value;
 		while (remaining >= 0x80) {

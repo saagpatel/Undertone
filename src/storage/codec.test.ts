@@ -9,7 +9,7 @@ import type {
 } from "../dsp/quantize";
 import { NOTE_VALUE_BEATS, quantizePhrase } from "../dsp/quantize";
 import { decodeComposition, encodeComposition } from "./codec";
-import { CODEC_VERSION } from "./config";
+import { BEAT_STEPS_PER_BEAT, CODEC_VERSION } from "./config";
 import { CodecError } from "./types";
 import type { Composition } from "./types";
 
@@ -224,6 +224,28 @@ describe("encodeComposition rejects unrepresentable input", () => {
 		expect(() =>
 			encodeComposition({ phrase: phrase([note()], { bpm: 0 }), key: null }),
 		).toThrow(/bpm/i);
+	});
+
+	it("throws CodecError rather than silently corrupting a varint past int32", () => {
+		// Bitwise ops coerce to int32, so a value at or above 2^31 would encode to
+		// wrong bytes that still decode cleanly. It must be refused instead.
+		const overflowBeat = 2 ** 31 / BEAT_STEPS_PER_BEAT;
+		expect(() =>
+			encodeComposition({
+				phrase: phrase([note({ beatPosition: overflowBeat })]),
+				key: null,
+			}),
+		).toThrow(/too large to encode/i);
+	});
+
+	it("still encodes the largest representable varint", () => {
+		const maxBeat = (2 ** 31 - 1 - 15) / BEAT_STEPS_PER_BEAT;
+		const input: Composition = {
+			phrase: phrase([note({ beatPosition: maxBeat })]),
+			key: null,
+		};
+		expect(decodeComposition(encodeComposition(input)).phrase.notes[0].beatPosition)
+			.toBe(maxBeat);
 	});
 
 	it("throws CodecError on a time signature that does not fit one byte", () => {

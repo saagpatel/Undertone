@@ -150,7 +150,8 @@ export function LibraryPanel({
 										className="library__input"
 										aria-label={`New name for ${record.name}`}
 										value={renameDraft}
-										// biome-ignore lint/a11y/noAutofocus: the rename field replaces a button the user just pressed.
+										// Focus follows the button the user just pressed, which this
+										// field replaces in place — without it, keyboard focus is lost.
 										autoFocus
 										onChange={(event) => setRenameDraft(event.target.value)}
 									/>
