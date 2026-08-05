@@ -25,11 +25,12 @@ This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP pl
 Project-specific overrides only — see IMPLEMENTATION-ROADMAP.md for architecture.
 
 ## Current Phase
-**v3 · Phase 12: In-App Score Editing — next, and the last of v3.**
+**v3 is complete. There is no next phase in the roadmap — new scope is an operator decision.**
 
-On `main` as of 2026-08-04: v1 (Phases 0–3), v2 (Phases 4–6), and v3 Phases 7 (chromatic harmony),
-8 (accompaniment textures), 9 (barlines + time signature), 10 (local persistence, share links, file
-I/O), and 11 (MIDI keyboard input). 307 vitest tests plus 40 browser checks, all green.
+On `main` as of 2026-08-04: v1 (Phases 0–3), v2 (Phases 4–6), and v3 Phases 7–12 — chromatic
+harmony, accompaniment textures, barlines + time signature, local persistence with share links and
+file I/O, MIDI keyboard input, and in-app score editing. 378 vitest tests plus 55 browser checks,
+all green.
 
 Phases 7–9 were written 2026-06-19 and sat unmerged on branches until 2026-08-04; they are landed
 now, so `main` is the single source of truth again.
@@ -41,8 +42,9 @@ Two standing caveats:
   is exhaustively unit-tested and feature detection is browser-proven, but no keyboard has played
   into it. Test with a real device before treating that path as proven.
 
-Phase 12 must respect the locked decision below: the SVG renderer stays a pure `Phrase → SVG`
-function, so editing maps interactions to a new immutable `Phrase` in the React layer.
+Editing respects the locked decision below: the SVG renderer is still a pure `Phrase → SVG`
+function. Melody glyphs carry a `noteIndex` for hit-testing, and every edit produces a new
+immutable `Phrase` in the React layer. Keep it that way.
 
 See IMPLEMENTATION-ROADMAP.md (the "v3 — Depth, Input, Editing & Persistence" section) for full phase details.
 
@@ -64,7 +66,7 @@ At the end of every phase, run `/code-review` (high) before committing the phase
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
 - Do not make the SVG renderer stateful — it stays a pure `Phrase → SVG` function; v3 editing maps interactions → a new immutable `Phrase` in the React layer.
 - Do not add WASM — all DSP, including v3 chromatic harmony, is pure TS.
-- Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md (v3 = Phases 7–12; deferred-beyond-v3 list at the roadmap's end stays out of scope).
+- Do not add features beyond the roadmap. v3 (Phases 7–12) is complete; the deferred-beyond-v3 list at the roadmap's end stays out of scope until the operator says otherwise.
 
 <!-- portfolio-context:start -->
 # Portfolio Context
@@ -75,10 +77,10 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 
 ## Current State
 
-**v3 · Phase 11 complete; Phase 12 (in-app score editing) is next and closes v3.** Capture from
-microphone or MIDI keyboard, notation, playback, SVG export, key detection, diatonic and chromatic
-harmony, accompaniment textures, measure structure, and local persistence with share links are all
-on `main`. 307 vitest tests plus 40 browser checks, green.
+**v3 complete.** Capture from microphone or MIDI keyboard, notation, playback, SVG export, key
+detection, diatonic and chromatic harmony, accompaniment textures, measure structure, local
+persistence with share links, and hand-editing the score are all on `main`. 378 vitest tests plus
+55 browser checks, green.
 
 See IMPLEMENTATION-ROADMAP.md for full phase details.
 
@@ -105,12 +107,13 @@ pnpm build && python3 scripts/prove-browser.py   # real-browser checks + screens
 
 - Do not add a backend — client-side only, nothing leaves the browser tab. Sharing is a URL hash and local files; the zero-network invariant is asserted in the browser harness.
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
-- Do not add features beyond the current phase of IMPLEMENTATION-ROADMAP.md.
+- Do not add features beyond the roadmap; v3 is complete and further scope is an operator decision.
 
 ## Next Recommended Move
 
-Build **v3 Phase 12: in-app score editing** — map interactions to a new immutable `Phrase` in the
-React layer, never as a renderer mutation. Before that, exercise the Phase 11 MIDI path with a
-physical keyboard; it is unit-tested and feature-detected but has never seen real hardware.
+The roadmap is finished, so the next move is an operator decision rather than a queued phase. Two
+things are worth doing before new scope: exercise the Phase 11 MIDI path with a physical keyboard
+(unit-tested and feature-detected, but never run against real hardware), and close the known Phase
+10 gaps — no delete confirmation, no save-over, no specific quota-exhausted state.
 
 <!-- portfolio-context:end -->
