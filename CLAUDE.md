@@ -3,6 +3,8 @@
 ## Overview
 Browser-based musical toy. Hum or whistle a melody into your mic — Undertone captures and renders it in real time as hand-scored sheet music, as if your voice revealed a composition the world was always hiding. Local-only, no backend, no install. First browser-audio + procedural-notation project.
 
+The confidence-aware rehearsal upgrade adds a current-tab baseline → target contour → repeat comparison without changing composition persistence or the pure notation renderer. See `REHEARSAL.md` for metric, privacy, retention, and claim boundaries.
+
 ## Tech Stack
 - React 18 + Vite 6 + TypeScript 5 (strict mode)
 - Web Audio API — mic capture via `getUserMedia`, real-time pitch detection via autocorrelation on `AnalyserNode` time-domain data

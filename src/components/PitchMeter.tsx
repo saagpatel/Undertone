@@ -27,8 +27,14 @@ function noteLabel(frequency: number): string {
 	return `${name}${octave}`;
 }
 
-/** Live frequency readout. Shows a dash until a confident pitch is detected. */
-export function PitchMeter({ pitch }: { pitch: PitchResult | null }) {
+/** Live frequency readout. Separates the idle state from an unpitched input. */
+export function PitchMeter({
+	pitch,
+	isListening = false,
+}: {
+	pitch: PitchResult | null;
+	isListening?: boolean;
+}) {
 	const confident =
 		pitch !== null &&
 		pitch.frequency > 0 &&
@@ -38,16 +44,23 @@ export function PitchMeter({ pitch }: { pitch: PitchResult | null }) {
 		<div className="pitch-meter">
 			<div
 				className="pitch-meter__note"
+				role="img"
 				aria-label={
 					confident
 						? `Detected ${noteLabel(pitch.frequency)}`
-						: "No pitch detected"
+						: isListening
+							? "Listening; no pitch detected"
+							: "Ready to listen"
 				}
 			>
 				{confident ? noteLabel(pitch.frequency) : "–"}
 			</div>
 			<div className="pitch-meter__hz">
-				{confident ? `${pitch.frequency.toFixed(1)} Hz` : "listening…"}
+				{confident
+					? `${pitch.frequency.toFixed(1)} Hz`
+					: isListening
+						? "listening…"
+						: "ready when you are"}
 			</div>
 			<div className="pitch-meter__confidence">
 				<span

@@ -20,6 +20,30 @@ export interface AudioCapture {
 /** AnalyserNode frame size — matches the DSP fixtures and detectPitch window. */
 export const ANALYSER_FFT_SIZE = 2048;
 
+/** Map browser/device failures to recovery-oriented, non-diagnostic copy. */
+export function describeMicrophoneError(problem: unknown): string {
+	if (problem instanceof DOMException) {
+		switch (problem.name) {
+			case "NotAllowedError":
+			case "PermissionDeniedError":
+				return "Microphone permission was denied. Allow access in browser settings, then try again.";
+			case "NotFoundError":
+			case "DevicesNotFoundError":
+				return "No microphone is available. Connect or select an audio input, then try again.";
+			case "NotReadableError":
+			case "TrackStartError":
+				return "The microphone is unavailable or already in use. Check the current audio route, then try again.";
+			case "AbortError":
+				return "The microphone could not start. Check the audio route and try again.";
+			case "SecurityError":
+				return "Microphone access requires a secure context and browser permission.";
+		}
+	}
+	return problem instanceof Error && problem.message
+		? problem.message
+		: "Microphone access failed. Check the input route and try again.";
+}
+
 /**
  * Owns the AudioContext → AnalyserNode lifecycle for mic capture. Construction
  * is deferred to {@link AudioCapture.start} so it always happens inside a user
@@ -82,9 +106,7 @@ export function useAudioCapture(): AudioCapture {
 		} catch (err) {
 			// Release the mic if we acquired it before a later step failed.
 			stream?.getTracks().forEach((track) => track.stop());
-			setError(
-				err instanceof Error ? err.message : "Microphone access failed.",
-			);
+			setError(describeMicrophoneError(err));
 			setState("error");
 		} finally {
 			startingRef.current = false;

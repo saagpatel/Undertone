@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CaptureSession } from "../dsp/capture";
 import { detectPitch, type PitchResult } from "../dsp/pitch";
-import { type Phrase, quantizePhrase } from "../dsp/quantize";
+import type { Phrase } from "../dsp/quantize";
+import { createMelodyTake, type MelodyTake } from "../dsp/rehearsal";
 import { useAudioCapture } from "./useAudioCapture";
 
 export interface Capture {
@@ -9,6 +10,8 @@ export interface Capture {
 	pitch: PitchResult | null;
 	/** Quantized phrase from the last stop; null until the first capture ends. */
 	phrase: Phrase | null;
+	/** Session-only evidence for confidence-aware rehearsal; never persisted. */
+	take: MelodyTake | null;
 	/**
 	 * Increments once per completed capture. Consumers use this rather than the
 	 * identity of `phrase` to detect "the user just hummed something new" —
@@ -35,7 +38,9 @@ export function useCapture(): Capture {
 	const audio = useAudioCapture();
 	const [pitch, setPitch] = useState<PitchResult | null>(null);
 	const [phrase, setPhrase] = useState<Phrase | null>(null);
+	const [take, setTake] = useState<MelodyTake | null>(null);
 	const [captureId, setCaptureId] = useState(0);
+	const nextCaptureIdRef = useRef(0);
 	const sessionRef = useRef<CaptureSession | null>(null);
 	const rafRef = useRef<number | null>(null);
 
@@ -67,6 +72,7 @@ export function useCapture(): Capture {
 
 	const start = useCallback(async () => {
 		setPhrase(null);
+		setTake(null);
 		sessionRef.current = new CaptureSession();
 		await audio.start();
 	}, [audio.start]);
@@ -77,8 +83,17 @@ export function useCapture(): Capture {
 		sessionRef.current = null;
 		audio.stop();
 		if (session) {
-			setPhrase(quantizePhrase(session.finish()));
-			setCaptureId((previous) => previous + 1);
+			const analysisStarted = performance.now();
+			const evidence = session.finishEvidence();
+			const id = ++nextCaptureIdRef.current;
+			const nextTake = createMelodyTake(
+				id,
+				evidence,
+				performance.now() - analysisStarted,
+			);
+			setPhrase(nextTake.phrase);
+			setTake(nextTake);
+			setCaptureId(id);
 		}
 		setPitch(null);
 	}, [audio.stop]);
@@ -86,6 +101,7 @@ export function useCapture(): Capture {
 	return {
 		pitch,
 		phrase,
+		take,
 		captureId,
 		isCapturing: audio.state === "running",
 		error: audio.error,
