@@ -12,6 +12,12 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const VITE = resolve(ROOT, "node_modules/vite/bin/vite.js");
 const AUDIO = resolve(ROOT, "tests/fixtures/rehearsal-hum.wav");
 const OUTPUT = resolve(ROOT, "artifacts/rehearsal-proof");
+const SUSTAINED_TAKES = Number(process.env.UNDERTONE_SUSTAINED_TAKES ?? 12);
+if (!Number.isInteger(SUSTAINED_TAKES) || SUSTAINED_TAKES < 12) {
+	throw new Error(
+		"UNDERTONE_SUSTAINED_TAKES must be an integer of at least 12",
+	);
+}
 const PROFILE = mkdtempSync(join(tmpdir(), "undertone-rehearsal-"));
 
 const SYNTHETIC_MIC_SCRIPT = `
@@ -30,7 +36,21 @@ Object.defineProperty(navigator, 'mediaDevices', {
       const limited = mode === 'limited';
 	  const pitchScale = mode === 'transposed' ? 2 ** (2 / 12) : 1;
       let start = context.currentTime + 0.12;
-	  if (mode !== 'silent') {
+	  const wavPath = mode === 'wav-breathy'
+	    ? '/tests/fixtures/rehearsal-hum-breathy.wav'
+	    : mode === 'wav-slides'
+	      ? '/tests/fixtures/rehearsal-hum-slides.wav'
+	      : null;
+	  if (wavPath) {
+	    const response = await fetch(wavPath);
+	    if (!response.ok) throw new Error('Unable to load project-owned WAV fixture');
+	    const buffer = await context.decodeAudioData(await response.arrayBuffer());
+	    const source = context.createBufferSource();
+	    source.buffer = buffer;
+	    source.connect(destination);
+	    source.start(start);
+	    start += buffer.duration;
+	  } else if (mode !== 'silent') {
         for (const [index, frequency] of notes.entries()) {
           const duration = index === notes.length - 1 ? 0.56 : 0.42;
           const oscillator = context.createOscillator();
@@ -64,6 +84,10 @@ Object.defineProperty(navigator, 'mediaDevices', {
         noise.start(context.currentTime + 0.04);
       }
       window.__undertoneFixtureContexts = [context];
+      window.__undertoneFixtureStreams = [
+        ...(window.__undertoneFixtureStreams ?? []),
+        destination.stream,
+      ];
       return destination.stream;
     },
   },
@@ -76,6 +100,16 @@ const delay = (ms) =>
 function check(label, condition, detail = "") {
 	if (!condition) throw new Error(`${label}: ${detail}`);
 	console.log(`  [PASS] ${label}${detail ? ` (${detail})` : ""}`);
+}
+
+function percentile(values, percentileValue) {
+	const sorted = [...values].sort((left, right) => left - right);
+	if (sorted.length === 0) return null;
+	const index = Math.min(
+		sorted.length - 1,
+		Math.ceil((percentileValue / 100) * sorted.length) - 1,
+	);
+	return sorted[Math.max(0, index)];
 }
 
 async function waitForJson(url, timeoutMs = 15_000) {
@@ -222,7 +256,7 @@ async function screenshot(cdp, filename) {
 	writeFileSync(resolve(OUTPUT, filename), Buffer.from(data, "base64"));
 }
 
-async function captureTake(cdp) {
+async function captureTake(cdp, durationMs = 2650) {
 	const hasStart = await evaluate(
 		cdp,
 		`[...document.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Start humming')`,
@@ -232,7 +266,7 @@ async function captureTake(cdp) {
 		cdp,
 		`[...document.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Stop')`,
 	);
-	await delay(2650);
+	await delay(durationMs);
 	const started = performance.now();
 	await clickButton(cdp, "Stop");
 	await waitFor(
@@ -445,6 +479,99 @@ try {
 		heap < 64 * 1024 * 1024,
 		`${(heap / 1024 / 1024).toFixed(1)} MiB`,
 	);
+
+	const sustained = [];
+	const sustainedModes = ["clean", "transposed", "limited"];
+	await page.send("HeapProfiler.enable");
+	for (let index = 0; index < SUSTAINED_TAKES; index += 1) {
+		const mode = sustainedModes[index % sustainedModes.length];
+		await evaluate(page, `window.__undertoneMicMode = ${JSON.stringify(mode)}`);
+		const stopToRenderMs = await captureTake(page);
+		const liveTracks = await evaluate(
+			page,
+			`(window.__undertoneFixtureStreams ?? []).flatMap((stream) => stream.getTracks()).filter((track) => track.readyState === 'live').length`,
+		);
+		const beforeGcMetrics = await page.send("Performance.getMetrics");
+		const beforeGcMap = Object.fromEntries(
+			beforeGcMetrics.metrics.map((metric) => [metric.name, metric.value]),
+		);
+		await page.send("HeapProfiler.collectGarbage");
+		const cycleMetrics = await page.send("Performance.getMetrics");
+		const cycleMap = Object.fromEntries(
+			cycleMetrics.metrics.map((metric) => [metric.name, metric.value]),
+		);
+		sustained.push({
+			cycle: index + 1,
+			mode,
+			stopToRenderMs,
+			jsHeapUsedBeforeGcBytes: beforeGcMap.JSHeapUsedSize ?? null,
+			domNodesBeforeGc: beforeGcMap.Nodes ?? null,
+			jsHeapUsedBytes: cycleMap.JSHeapUsedSize ?? null,
+			domNodes: cycleMap.Nodes ?? null,
+			liveTracksAfterStop: liveTracks,
+		});
+	}
+	const sustainedLatencies = sustained.map((cycle) => cycle.stopToRenderMs);
+	const sustainedHeaps = sustained
+		.map((cycle) => cycle.jsHeapUsedBytes)
+		.filter((value) => Number.isFinite(value));
+	const sustainedNodes = sustained
+		.map((cycle) => cycle.domNodes)
+		.filter((value) => Number.isFinite(value));
+	const latencyP50 = percentile(sustainedLatencies, 50);
+	const latencyP95 = percentile(sustainedLatencies, 95);
+	const firstHeap = sustainedHeaps[0] ?? heap;
+	const lastHeap = sustainedHeaps.at(-1) ?? heap;
+	const heapDelta = lastHeap - firstHeap;
+	const domNodeSpread =
+		sustainedNodes.length === 0
+			? null
+			: Math.max(...sustainedNodes) - Math.min(...sustainedNodes);
+	check(
+		"sustained stop-to-render p95 stays bounded",
+		latencyP95 !== null && latencyP95 < 500,
+		`${latencyP95?.toFixed(1)} ms across ${SUSTAINED_TAKES} takes`,
+	);
+	check(
+		"sustained heap growth stays bounded",
+		heapDelta < 16 * 1024 * 1024 &&
+			Math.max(...sustainedHeaps) < 64 * 1024 * 1024,
+		`${(heapDelta / 1024 / 1024).toFixed(1)} MiB first-to-last`,
+	);
+	check(
+		"sustained DOM stays structurally stable",
+		domNodeSpread !== null && domNodeSpread < 160,
+		`${domNodeSpread} node spread`,
+	);
+	const wavVariants = [];
+	for (const [mode, expectedName] of [
+		["wav-breathy", "breathy"],
+		["wav-slides", "sliding"],
+	]) {
+		await evaluate(page, `window.__undertoneMicMode = ${JSON.stringify(mode)}`);
+		await captureTake(page, 3_250);
+		const quality = await evaluate(
+			page,
+			`[...document.querySelectorAll('.rehearsal-quality')].at(-1)?.innerText ?? ''`,
+		);
+		const noteMatch = quality.match(/(\d+) notes/);
+		const noteCountForVariant = Number(noteMatch?.[1] ?? 0);
+		check(
+			`${expectedName} WAV reaches the browser capture flow`,
+			noteCountForVariant >= 3 && noteCountForVariant <= 5,
+			quality.replace(/\s+/g, " "),
+		);
+		wavVariants.push({ mode, noteCount: noteCountForVariant, quality });
+	}
+	const historicalLiveTracks = await evaluate(
+		page,
+		`(window.__undertoneFixtureStreams ?? []).flatMap((stream) => stream.getTracks()).filter((track) => track.readyState === 'live').length`,
+	);
+	check(
+		"every historical microphone track is released after stop",
+		sustained.every((cycle) => cycle.liveTracksAfterStop === 0) &&
+			historicalLiveTracks === 0,
+	);
 	const offsite = requests.filter((url) => !url.startsWith(ORIGIN));
 	check(
 		"rehearsal makes zero off-origin requests",
@@ -523,11 +650,26 @@ try {
 		failure.close();
 	}
 
-	const energy = sampleMacEnergy(PROFILE);
+	await evaluate(page, `window.__undertoneMicMode = 'clean'`);
+	await clickButton(page, "Hum again");
+	await waitFor(
+		page,
+		`[...document.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Stop')`,
+	);
+	const activeEnergy = sampleMacEnergy(PROFILE);
+	await clickButton(page, "Stop");
+	await waitFor(
+		page,
+		`[...document.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Hum again')`,
+	);
+	const idleEnergy = sampleMacEnergy(PROFILE);
 	check(
-		"relative energy sample is available with an explicit boundary",
-		energy.processCount > 0 && Number.isFinite(energy.relativePower),
-		`${energy.processCount} Chrome processes; POWER ${energy.relativePower}`,
+		"active and post-stop relative energy samples are available",
+		activeEnergy.processCount > 0 &&
+			idleEnergy.processCount > 0 &&
+			Number.isFinite(activeEnergy.relativePower) &&
+			Number.isFinite(idleEnergy.relativePower),
+		`active POWER ${activeEnergy.relativePower}; post-stop POWER ${idleEnergy.relativePower}`,
 	);
 	const performanceEvidence = {
 		firstStopToRenderMs: firstStopMs,
@@ -537,9 +679,18 @@ try {
 		taskDurationSeconds: metricMap.TaskDuration ?? null,
 		scriptDurationSeconds: metricMap.ScriptDuration ?? null,
 		layoutDurationSeconds: metricMap.LayoutDuration ?? null,
-		chromeProcessCount: energy.processCount,
-		macOsRelativePower: energy.relativePower,
-		chromeCpuPercentAtSample: energy.cpuPercent ?? null,
+		sustainedTakeCount: SUSTAINED_TAKES,
+		sustainedStopToRenderP50Ms: latencyP50,
+		sustainedStopToRenderP95Ms: latencyP95,
+		sustainedHeapDeltaBytes: heapDelta,
+		sustainedDomNodeSpread: domNodeSpread,
+		sustainedCycles: sustained,
+		projectOwnedWavVariants: wavVariants,
+		chromeProcessCount: activeEnergy.processCount,
+		macOsActiveRelativePower: activeEnergy.relativePower,
+		macOsPostStopRelativePower: idleEnergy.relativePower,
+		chromeActiveCpuPercentAtSample: activeEnergy.cpuPercent ?? null,
+		chromePostStopCpuPercentAtSample: idleEnergy.cpuPercent ?? null,
 		energyBoundary:
 			"macOS top POWER is a relative sampled energy-impact signal, not watts or battery-life proof",
 	};
@@ -547,7 +698,14 @@ try {
 		resolve(OUTPUT, "performance.json"),
 		`${JSON.stringify(performanceEvidence, null, 2)}\n`,
 	);
-	writeFileSync(resolve(OUTPUT, "top-energy-sample.txt"), energy.raw);
+	writeFileSync(
+		resolve(OUTPUT, "top-energy-active-sample.txt"),
+		activeEnergy.raw,
+	);
+	writeFileSync(
+		resolve(OUTPUT, "top-energy-post-stop-sample.txt"),
+		idleEnergy.raw,
+	);
 	console.log(JSON.stringify(performanceEvidence, null, 2));
 	page.close();
 } finally {

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+	HUMMING_SAMPLE_RATE,
+	makeHummingFrame,
+	silentHummingFrame,
+} from "../../tests/fixtures/humming";
 import { adverseFrames } from "../../tests/fixtures/rehearsal";
 import {
 	CaptureSession,
@@ -6,6 +11,7 @@ import {
 	reduceFramesToPhrase,
 } from "./capture";
 import type { PitchResult } from "./pitch";
+import { detectPitch } from "./pitch";
 
 function frame(
 	frequency: number,
@@ -66,6 +72,16 @@ describe("reduceFramesToPhrase", () => {
 		expect(phrase[0].frequency).toBeCloseTo(440, 0);
 		expect(phrase[1].frequency).toBeCloseTo(523.25, 0);
 	});
+
+	it("keeps a gradual portamento inside one note", () => {
+		const portamento = Array.from({ length: 14 }, (_, index) =>
+			frame(440 * 2 ** ((index * 8) / 1_200), index * 40),
+		);
+		const phrase = reduceFramesToPhrase(portamento);
+		expect(phrase).toHaveLength(1);
+		expect(phrase[0].frequency).toBeGreaterThan(450);
+		expect(phrase[0].frequency).toBeLessThan(470);
+	});
 });
 
 describe("CaptureSession", () => {
@@ -125,5 +141,41 @@ describe("captureEvidenceFromFrames", () => {
 			"clipping",
 			"out-of-range",
 		]);
+	});
+
+	it("reduces a humming-like phrase without inventing notes in quiet gaps", () => {
+		const frequencies = [440, 493.88, 523.25, 587.33];
+		const frames: PitchResult[] = [];
+		let timestamp = 0;
+		for (const [noteIndex, frequency] of frequencies.entries()) {
+			for (let index = 0; index < 8; index += 1) {
+				frames.push({
+					...detectPitch(
+						makeHummingFrame({
+							frequency,
+							startSeconds: timestamp / 1_000,
+							seed: 0x510000 + noteIndex * 100 + index,
+						}),
+						HUMMING_SAMPLE_RATE,
+					),
+					timestamp,
+				});
+				timestamp += 40;
+			}
+			for (let index = 0; index < 4; index += 1) {
+				frames.push({
+					...detectPitch(silentHummingFrame(), HUMMING_SAMPLE_RATE),
+					timestamp,
+				});
+				timestamp += 40;
+			}
+		}
+
+		const evidence = captureEvidenceFromFrames(frames);
+		expect(evidence.rawPhrase).toHaveLength(4);
+		expect(evidence.rawPhrase[0].frequency).toBeGreaterThan(430);
+		expect(evidence.rawPhrase[0].frequency).toBeLessThan(450);
+		expect(evidence.quality.voicedFrames).toBeGreaterThanOrEqual(28);
+		expect(evidence.quality.noiseFrames).toBe(0);
 	});
 });

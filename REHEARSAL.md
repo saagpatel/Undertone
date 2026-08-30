@@ -14,6 +14,8 @@ The comparison describes captured signal patterns:
 
 Possible octave shifts are labeled as possibilities. The current autocorrelation detector emits one selected pitch rather than a ranked candidate set, so Undertone does not claim that it can identify detector-level octave ambiguity.
 
+Gradual portamento remains inside one captured note; an abrupt frame-to-frame pitch step can start a new note even without silence. Smoothly connected intended notes are therefore an analysis ambiguity rather than guaranteed onset evidence.
+
 These metrics are signal-analysis evidence only. They do not establish vocal health, vocal technique, pedagogical correctness, or a demonstrated learning benefit.
 
 ## Privacy and retention
@@ -25,7 +27,7 @@ These metrics are signal-analysis evidence only. They do not establish vocal hea
 - Rehearsal evidence is not added to IndexedDB, share links, exported files, or the composition codec.
 - Inferred rehearsal tempo does not change the existing composition quantization used by save, share, export, or normal playback.
 - The existing Library remains separate: it stores a quantized score only when the user explicitly saves it. It never stores captured audio.
-- The deterministic evaluation corpus is synthetic and project-owned. No external audio dataset is acquired.
+- The deterministic evaluation corpus is synthetic and project-owned. Its clean, breathy, and sliding variants use harmonic roll-off, amplitude motion, vibrato, glides, irregular gaps, and seeded breath noise. They are humming-like proxies, not human vocal recordings, and no external audio dataset is acquired.
 
 ## Failure and uncertainty states
 
@@ -37,6 +39,9 @@ When evidence is weak, feedback describes what to recheck and does not claim imp
 
 - `pnpm fixtures:rehearsal` regenerates the project-owned WAV corpus deterministically.
 - `pnpm test` runs the clean, transposed, octave, timing, noise, silence, clipping, permission, and state-loop checks against expected ranges.
-- On macOS with Google Chrome installed, `pnpm prove:rehearsal` starts an isolated Vite server and disposable headless Chrome profile, exercises the real microphone-analysis flow with deterministic Web Audio input, records visual/accessibility/performance evidence under `artifacts/rehearsal-proof`, then removes its browser profile and stops the server.
+- On macOS with Google Chrome installed, `pnpm prove:rehearsal` starts an isolated Vite server and disposable headless Chrome profile, exercises the real microphone-analysis flow with deterministic Web Audio input, runs a 12-take sustained session, records visual/accessibility/performance evidence under `artifacts/rehearsal-proof`, then removes its browser profile and stops the server.
+- `pnpm prove:microphones` uses a separate disposable Chrome profile without fake media flags. It exercises each available built-in and USB route through Undertone with ambient input plus quiet and normal project-owned acoustic stimuli, records only redacted route categories/settings and aggregate UI readback, treats BlackHole as a virtual control, retains no audio, and restores no system setting because device selection is scoped to the temporary stream. A route-access pass is not a signal-quality pass: each route reports whether it detected the acoustic phrase. Phone Continuity audio is opt-in through `UNDERTONE_PHYSICAL_MIC_LABELS` so validation does not wake a nearby phone unexpectedly.
 
 The browser proof's macOS `top` POWER value is a relative sampled energy-impact signal. It is not watts, battery-life proof, or production telemetry.
+
+`COMPREHENSION_STUDY.md` defines the local, consented participant protocol. Automated and agent reviews may find copy problems but never count as human comprehension evidence.

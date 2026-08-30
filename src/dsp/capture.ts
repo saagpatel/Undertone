@@ -208,7 +208,6 @@ export function reduceFramesToPhrase(
 	let voicedRun: PitchResult[] = [];
 	let inNote = false;
 	let onsetMs = 0;
-	let refFreq = 0;
 	let noteFreqs: number[] = [];
 	let lastVoicedMs = 0;
 	let belowRun = 0;
@@ -230,7 +229,6 @@ export function reduceFramesToPhrase(
 		inNote = true;
 		onsetMs = run[0].timestamp;
 		noteFreqs = run.map((f) => f.frequency);
-		refFreq = median(noteFreqs);
 		lastVoicedMs = run[run.length - 1].timestamp;
 		belowRun = 0;
 		voicedRun = [];
@@ -251,10 +249,13 @@ export function reduceFramesToPhrase(
 
 		if (voiced) {
 			if (
-				Math.abs(centsBetween(frame.frequency, refFreq)) > MAX_NOTE_SHIFT_CENTS
+				Math.abs(
+					centsBetween(frame.frequency, noteFreqs[noteFreqs.length - 1]),
+				) > MAX_NOTE_SHIFT_CENTS
 			) {
-				// Pitch jumped without an intervening silence — close this note and
-				// start tracking the next one from this frame.
+				// An abrupt frame-to-frame jump without silence starts a new note.
+				// Comparing with the previous voiced frame keeps a gradual portamento
+				// inside one uncertain note instead of inventing repeated onsets.
 				endNote();
 				voicedRun = [frame];
 			} else {

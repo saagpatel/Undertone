@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	HUMMING_SAMPLE_RATE,
+	makeHummingFrame,
+	silentHummingFrame,
+} from "../../tests/fixtures/humming";
+import {
 	cleanBaseline,
 	extraPassingNote,
 	fasterSameContour,
@@ -10,7 +15,12 @@ import {
 	transposedUpTwo,
 	transposedWithLocalDrift,
 } from "../../tests/fixtures/rehearsal";
-import type { CaptureQualitySummary, RawPhrase } from "./capture";
+import {
+	type CaptureQualitySummary,
+	captureEvidenceFromFrames,
+	type RawPhrase,
+} from "./capture";
+import { detectPitch, type PitchResult } from "./pitch";
 import { quantizePhrase } from "./quantize";
 import {
 	compareTakes,
@@ -54,6 +64,40 @@ function take(
 		tempo,
 		processingLatencyMs: 1.5,
 	};
+}
+
+function hummingEvidence(
+	frequencies: readonly number[],
+	localCents: readonly number[] = frequencies.map(() => 0),
+) {
+	const frames: PitchResult[] = [];
+	let timestamp = 0;
+	for (const [noteIndex, frequency] of frequencies.entries()) {
+		for (let index = 0; index < 8; index += 1) {
+			frames.push({
+				...detectPitch(
+					makeHummingFrame({
+						frequency: frequency * 2 ** (localCents[noteIndex] / 1_200),
+						startSeconds: timestamp / 1_000,
+						seed: 0x520000 + noteIndex * 100 + index,
+					}),
+					HUMMING_SAMPLE_RATE,
+				),
+				timestamp,
+			});
+			timestamp += 40;
+		}
+		if (noteIndex < frequencies.length - 1) {
+			for (let index = 0; index < 3; index += 1) {
+				frames.push({
+					...detectPitch(silentHummingFrame(), HUMMING_SAMPLE_RATE),
+					timestamp,
+				});
+				timestamp += 40;
+			}
+		}
+	}
+	return captureEvidenceFromFrames(frames);
 }
 
 describe("estimateTempo", () => {
@@ -111,6 +155,22 @@ describe("compareTakes", () => {
 		expect(comparison.pitch?.meanAbsoluteLocalErrorCents).toBeGreaterThan(15);
 		expect(comparison.pitch?.meanAbsoluteLocalErrorCents).toBeLessThan(40);
 		expect(comparison.pitch?.maxAbsoluteLocalErrorCents).toBeGreaterThan(25);
+	});
+
+	it("preserves global shift versus local drift through humming-like detection", () => {
+		const frequencies = [440, 493.88, 523.25, 587.33];
+		const baseline = createMelodyTake(1, hummingEvidence(frequencies), 2);
+		const repeat = createMelodyTake(
+			2,
+			hummingEvidence(frequencies, [185, 215, 172, 222]),
+			2,
+		);
+		const comparison = compareTakes(baseline, repeat);
+
+		expect(comparison.pitch?.globalTranspositionSemitones).toBe(2);
+		expect(comparison.pitch?.meanAbsoluteLocalErrorCents).toBeGreaterThan(10);
+		expect(comparison.pitch?.meanAbsoluteLocalErrorCents).toBeLessThan(35);
+		expect(comparison.pitch?.maxAbsoluteLocalErrorCents).toBeLessThan(50);
 	});
 
 	it("does not grant perfect alignment confidence to an unrelated equal-length contour", () => {
