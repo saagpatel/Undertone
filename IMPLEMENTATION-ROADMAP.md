@@ -17,16 +17,16 @@ Full architecture + phased build plan. CLAUDE.md is identity; this is the build 
     │                   │                           beamGroups()        <NotationCanvas>
     ▼                 src/dsp/capture.ts                                  (SVG viewport)
   AnalyserNode          CaptureSession               src/notation/
-    │ getFloat-         accumulate()                 accidentals.ts      <RevealOverlay>
+    │ getFloat-         push() / finish()             accidentals.ts      <NotationCanvas>
     │ TimeDomainData    → RawPhrase                                      (CSS ink animation,
     │ (2048 smp,         │                           src/notation/        Phase 3)
-    │  60 fps)         src/dsp/quantize.ts           render.ts
-    │                   quantizePhrase()             phraseToSVG()       <PlaybackEngine>
+    │ ~60 fps)         src/dsp/quantize.ts           render.ts
+    │                   quantizePhrase()             phraseToSVG()       usePlayback()
     └──────────────►    → Phrase ──────────────────► → SVGElementSpec[]  (Web Audio osc,
                                                                           Phase 3)
 ```
 
-Both capture paths (mic → autocorrelation → capture session → quantize) converge on one `Phrase` data shape, one rendering layer (`notation/render.ts`), and one React SVG viewport. The reveal animation and playback (Phase 3) read from the same immutable `Phrase` without mutation.
+Both capture paths (mic → autocorrelation → capture session → quantize; MIDI → MIDI session → quantize) converge on one `Phrase` data shape, one rendering layer (`src/notation/render.ts`), and one React SVG viewport. The reveal animation and playback (Phase 3) read from the same immutable `Phrase` without mutation.
 
 ### File Structure
 
@@ -38,26 +38,26 @@ Undertone/
 │   ├── dsp/
 │   │   ├── pitch.ts                      # detectPitch(buffer, sampleRate) → PitchResult
 │   │   ├── pitch.test.ts
-│   │   ├── capture.ts                    # CaptureSession: AnalyserNode + RAF loop
+│   │   ├── capture.ts                    # CaptureSession: frame buffering + pure reduction
 │   │   ├── capture.test.ts
 │   │   ├── quantize.ts                   # quantizePhrase(raw, opts) → Phrase
 │   │   └── quantize.test.ts
 │   ├── notation/
-│   │   ├── types.ts                      # SVGElementSpec, NotePosition, StaffGeometry
+│   │   ├── types.ts                      # SVGElementSpec, RevealRole, StaffGeometry
 │   │   ├── layout.ts                     # notePosition(), staffGeometry(), beamGroups()
 │   │   ├── layout.test.ts
-│   │   ├── accidentals.ts                # accidentalFor() → SVGElementSpec
+│   │   ├── accidentals.ts                # accidentalFor(accidental, x, y, spacing) → SVGElementSpec | null
 │   │   ├── accidentals.test.ts
 │   │   ├── render.ts                     # phraseToSVG(phrase, geom) → SVGElementSpec[]
 │   │   └── render.test.ts
 │   ├── components/
-│   │   ├── NotationCanvas.tsx            # renders SVGElementSpec[] into <svg>
+│   │   ├── NotationCanvas.tsx            # renders SVGElementSpec[] + ink-reveal animation
 │   │   ├── PitchMeter.tsx                # Phase 0: live frequency readout
-│   │   ├── CaptureButton.tsx             # arm / recording / done states
-│   │   └── RevealOverlay.tsx             # Phase 3: ink-reveal animation
+│   │   └── CaptureButton.tsx             # idle / recording / done states
 │   ├── hooks/
 │   │   ├── useAudioCapture.ts            # owns AudioContext lifecycle
-│   │   └── useCapture.ts                 # drives CaptureSession; returns Phrase
+│   │   ├── useCapture.ts                 # owns RAF loop; drives CaptureSession; returns Phrase
+│   │   └── usePlayback.ts                # Web Audio oscillator playback
 │   └── styles/
 │       ├── global.css
 │       └── notation.css                  # paper-tone bg, ink stroke vars
@@ -88,6 +88,7 @@ export interface PitchResult {
   frequency: number;    // Hz; 0 = silence / undetected
   confidence: number;   // 0..1; gate note acceptance at ≥0.9
   rms: number;          // gate silence at ≥0.01
+  peak: number;         // largest absolute sample; clipping evidence
   timestamp: number;    // performance.now()
 }
 
@@ -106,7 +107,7 @@ export type NoteValue = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
 export interface NoteEvent {
   pitch: NoteName;
   accidental: Accidental;
-  octave: number;          // 2..7
+  octave: number;          // integer; persistence codec accepts 0..9
   noteValue: NoteValue;
   beatPosition: number;    // quarter-note units from phrase start; multiples of 0.25
 }
@@ -125,23 +126,28 @@ export interface StaffGeometry {
   numLines: number;       // always 5
 }
 export type SVGShapeKind = 'line' | 'ellipse' | 'path' | 'text';
+export type RevealRole = 'frame' | number;
 export interface SVGElementSpec {
   kind: SVGShapeKind;
   attrs: Record<string, string | number>;
   className?: string;
+  text?: string;
+  reveal?: RevealRole;
+  noteIndex?: number;
 }
 ```
 
 ### API Contracts
 
-Undertone makes **zero outbound network requests**. No backend, no analytics, no CDN imports.
+Undertone makes **zero outbound network requests beyond loading the app's own assets**. No backend, no analytics, no CDN imports.
 
 | Browser API | Usage | Constraint |
 |---|---|---|
 | `getUserMedia({ audio: true })` | Mic capture | Requires secure context (localhost or HTTPS). Fails gracefully with error state. |
 | `AudioContext` + `AnalyserNode` | Pitch analysis | Must be created in response to user gesture. `fftSize: 2048`, `smoothingTimeConstant: 0`. |
-| `requestAnimationFrame` | 60 fps pitch loop | Cancelled via handle on stop. |
-| `localStorage` | Optional phrase save (Phase 3) | Key: `undertone.lastPhrase`. JSON `Phrase`. |
+| `requestAnimationFrame` | Pitch loop at the browser's frame cadence (typically ~60 fps) | Cancelled via handle on stop. |
+| `indexedDB` | Named composition library | Falls back to an in-memory store when unavailable. |
+| `location.hash` | Share-link restoration | Packed composition payload; fragment is not sent to the server. |
 
 ### Dependencies
 
@@ -149,26 +155,26 @@ Undertone makes **zero outbound network requests**. No backend, no analytics, no
 # Scaffold
 pnpm create vite@latest Undertone -- --template react-ts
 
-# Dev dependencies (pinned)
-pnpm add -D vitest@^2.1.0 @vitest/ui@^2.1.0 jsdom@^25.0.0
+# Dev dependencies (manifest ranges; exact versions in pnpm-lock.yaml)
+pnpm add -D vitest@^4.1.8 @vitest/ui@^4.1.8 jsdom@^25.0.0
 pnpm add -D @testing-library/react@^16.0.0 @testing-library/user-event@^14.5.0
-pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
+# Real-browser harness: Python Playwright (not a package.json dependency)
 
-# Runtime: none. Web Audio API is a browser built-in. Notation renderer is pure TS.
+# Runtime packages: react + react-dom. Web Audio API is a browser built-in. Notation renderer is pure TS.
 ```
 
 ## Scope Boundaries
 
-**In scope (v1):** mic capture, real-time autocorrelation pitch detection, phrase capture + quantization, procedural SVG notation renderer (staff, treble clef, noteheads, stems, beams), reveal animation, Web Audio playback, SVG export, optional localStorage phrase save.
+**In scope (v1):** mic capture, real-time autocorrelation pitch detection, phrase capture + quantization, procedural SVG notation renderer (staff, treble clef, noteheads, stems, beams), reveal animation, Web Audio playback, SVG export. Persistence is implemented in v3 with IndexedDB + file I/O + share links, not localStorage.
 
-**Out of scope:** backend, server, database, auth, analytics, notation library, WASM module, any network request.
+**Out of scope:** backend, server, server-side database, auth, analytics, notation library, WASM module, any network request beyond loading the app's own assets.
 
-**Deferred to v2:** WASM harmonic analysis module, procedural accompaniment/harmonization, multi-voice notation, MIDI input, score editing, cloud save.
+**Delivered in v2/v3:** procedural accompaniment/harmonization, grand-staff notation, MIDI input, score editing, enhanced local persistence. WASM remains deferred indefinitely; cloud save with a backend remains out of scope.
 
 ## Security and Credentials
 
 - No credentials in scope. No API keys, no tokens, no user accounts.
-- Nothing leaves the browser tab. Only browser APIs used: `getUserMedia`, `AudioContext`, `localStorage`.
+- Nothing leaves the browser tab except through user-initiated file export, clipboard share links, and the URL hash. Browser APIs include `getUserMedia`, `AudioContext`, IndexedDB, Web MIDI, URL hash, clipboard, and local file import/export.
 - Mic stream released on stop (`stream.getTracks().forEach(t => t.stop())`); `AudioContext` suspended or closed when inactive.
 - Client-side-only data boundary is a hard constraint. Any future network request requires a full security review before landing.
 
@@ -180,12 +186,12 @@ pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
 
 **Tasks:**
 1. Scaffold: `pnpm create vite Undertone --template react-ts`; add Vitest + jsdom; verify `pnpm dev`, `pnpm test`, `pnpm build` all work.
-   Acceptance: `pnpm dev` → `localhost:5173`; `pnpm test` → passes on empty suite; `pnpm build` → `dist/` produced.
+   Acceptance: `pnpm dev` → `localhost:5173`; `pnpm test` → passes current suite; `pnpm build` → `dist/` produced.
 2. `useAudioCapture.ts`: `getUserMedia` → `AudioContext` → `AnalyserNode` (fftSize 2048, smoothingTimeConstant 0); exposes `{ start, stop, analyser, sampleRate }`.
    Acceptance: Button click → mic permission dialog; `AudioContext.state === 'running'` after grant.
-3. `src/dsp/pitch.ts`: `detectPitch(buffer: Float32Array, sampleRate: number): PitchResult` — autocorrelation, lag search clamped to C3–C6 (130–1046 Hz), confidence = normalized peak, rms = buffer RMS.
+3. `src/dsp/pitch.ts`: `detectPitch(buffer: Float32Array, sampleRate: number): PitchResult` — autocorrelation, lag search clamped to C3–C6 (130–1047 Hz), confidence = normalized peak, rms = buffer RMS.
    Acceptance: `pnpm test src/dsp/pitch.test.ts` → 440 Hz sine → frequency within ±5 Hz, confidence ≥ 0.9; silence → frequency = 0, rms < 0.01.
-4. Wire `detectPitch` into 60 fps RAF loop via `useCapture.ts`; render in `<PitchMeter>`.
+4. Wire `detectPitch` into the RAF loop (typically ~60 fps) via `useCapture.ts`; render in `<PitchMeter>`.
    Acceptance: Humming A4 → live readout shows ~440 Hz and "A4" within 50 ms.
 5. Write `progress.json` + `tests.json`.
    Acceptance: valid JSON; Phase 0 tasks "done".
@@ -250,10 +256,10 @@ pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
 
 **Tasks:**
 1. `src/notation/layout.ts` — `notePosition(note, geom): number` mapping pitch class + octave → staff y-coordinate (one staff space = `geom.lineSpacing`); `beamGroups(notes): NoteEvent[][]` grouping consecutive eighth/sixteenth notes.
-   Acceptance: `pnpm test src/notation/layout.test.ts` → all chromatic notes C3–C6 → correct staff-y values per reference table; C4 (middle C) → one ledger line below staff.
-2. `src/notation/accidentals.ts` — `accidentalFor(pitch, accidental)` → SVG path string for sharp/flat glyphs (geometric approximation, not font glyph).
-   Acceptance: `pnpm test src/notation/accidentals.test.ts` → F# → sharp SVGElementSpec with correct attrs.
-3. `src/notation/render.ts` — `phraseToSVG(phrase, geom): SVGElementSpec[]`: 5 staff lines, treble clef (simplified path or Unicode fallback `𝄞`), notehead ellipses (rotated ~15°, aspect ratio 1.4:1) at correct y-coords, stems (standard lengths, direction by pitch vs B4), beams (filled rects for beamed groups), accidentals, ledger lines for out-of-staff notes.
+   Acceptance: `pnpm test src/notation/layout.test.ts` → staff-line/space reference pitches + monotonic octave placement C3–C6; C4 (middle C) → one ledger line below staff.
+2. `src/notation/accidentals.ts` — `accidentalFor(accidental, x, y, lineSpacing)` → SVGElementSpec path for sharp/flat glyphs, or null for natural (geometric approximation, not font glyph).
+   Acceptance: `pnpm test src/notation/accidentals.test.ts` → sharp/flat → path SVGElementSpec with correct attrs; natural → null.
+3. `src/notation/render.ts` — `phraseToSVG(phrase, geom, chords?, style?): SVGElementSpec[]`: 5 treble staff lines, drawn treble clef path, notehead ellipses (rotated ~15°, aspect ratio 1.4:1) at correct y-coords, stems (standard lengths, direction by pitch vs B4), beams (one straight stroked `line` per beamed group), accidentals, ledger lines for out-of-staff notes.
    Acceptance: `pnpm test src/notation/render.test.ts` → `fixture-phrase` (C4 q, E4 q, G4 h) → exactly 5 staff lines, 3 noteheads at correct y-coords, stems on quarter notes, no beam on half note.
 4. `<NotationCanvas>` — renders `SVGElementSpec[]` into `<svg viewBox>` with CSS variables for stroke weight + ink color; apply `notation.css` (paper-tone background `#f8f4ec`, ink `#1a1208`, rotated notehead ellipses).
    Acceptance: `fixture-phrase` renders legibly in browser; hand-scored aesthetic distinguishable from clean machine-printed notation.
@@ -263,7 +269,7 @@ pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
 **Verification checklist:**
 - [ ] `pnpm test` → all tests pass (layout, accidentals, render)
 - [ ] `fixture-phrase` in browser: 5 staff lines, treble clef, correct noteheads
-- [ ] C4 one ledger line below staff; G5 one ledger line above staff
+- [ ] C4 one ledger line below staff; A5 one ledger line above staff (G5 is the space above)
 - [ ] Stems up for notes below B4; down for B4 and above
 - [ ] Full pipeline: hum → stop → notation renders within 500 ms
 - [ ] `pnpm build` → no TypeScript errors
@@ -285,11 +291,11 @@ pnpm add -D playwright@latest @playwright/test@latest   # Phase 3 optional e2e
 **Objective:** Reveal animation (notes appear as ink-drawing over ≈1 s); Web Audio oscillator playback of captured melody; SVG download export; aesthetic tuning (paper + ink feel). Closes the creative loop — hum → see → hear → share.
 
 **Tasks:**
-1. `<RevealOverlay>` — `stroke-dashoffset` animation on noteheads + stems; fade-in for staff + clef; staggered per-note delays so notes appear sequentially over ≈1 s. Re-triggers on new capture.
+1. `<NotationCanvas>` + `src/styles/notation.css` — `stroke-dashoffset` animation on noteheads + stems; fade-in for staff + clef; staggered per-note delays so notes appear sequentially over ≈1 s. Re-triggers on new capture.
    Acceptance: Phrase appears note-by-note over ≈1 s with visible ink-drawing motion; re-triggerable.
 2. Playback: `usePlayback` hook — schedule Web Audio oscillators per `NoteEvent`; all starts computed from `AudioContext.currentTime + 0.05` base; sine wave + slight detune for warmth; clean stop.
    Acceptance: "Play" → pitches play in sequence at correct notes; stops without audio glitch.
-3. SVG export — `<a download="undertone.svg">` + `URL.createObjectURL(blob)` of serialized SVG string; optional `localStorage.setItem('undertone.lastPhrase', JSON.stringify(phrase))` on capture.
+3. SVG export — `<a download="undertone.svg">` + `URL.createObjectURL(blob)` of serialized SVG string. Composition persistence is handled by Phase 10, not localStorage.
    Acceptance: "Export" → downloads valid `.svg`; file opens in browser and shows notation.
 4. Aesthetic tuning — paper background (`#f8f4ec`), ink (`#1a1208`), SVG `<feTurbulence>` filter for stroke irregularity, staff-line weight variation via CSS.
    Acceptance: Operator confirms render reads as hand-scored.
@@ -329,7 +335,7 @@ v1 (Phases 0–3) is complete: hum → quantized melody → hand-scored notation
 | Accompaniment texture | Block triad + bass root (v2 baseline); arpeggio/style variants deferred | Simplest musical voicing; notation and playback both straightforward. |
 | Harmonic vocabulary | Strictly diatonic (no secondary dominants / borrowed chords in v2) | Always-consonant baseline; chromatic color is a later enhancement. |
 
-**Unchanged hard constraints:** client-side only, zero network requests, no backend, no notation library, no WASM (the v1 deferral of WASM harmonics still holds — harmonization is pure TS).
+**Unchanged hard constraints:** client-side only, zero network requests beyond app assets, no backend, no notation library, no WASM (the v1 deferral of WASM harmonics still holds — harmonization is pure TS).
 
 ### New type definitions
 
@@ -347,6 +353,7 @@ export interface ChordTone { pitch: NoteName; accidental: Accidental; }
 export interface Chord {
   roman: string;            // 'I' | 'ii' | 'IV' | 'V' | 'vi' | 'vii°' (+ minor-mode variants)
   degree: number;           // scale degree 1..7 of the chord root
+  quality: 'major' | 'minor' | 'dim';
   root: ChordTone;
   tones: ChordTone[];       // triad pitch classes, root-position
   symbol: string;           // chord-symbol label, e.g. 'C', 'Am', 'G'
@@ -364,18 +371,18 @@ Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the h
 **Objective:** The brain. `detectKey` infers the melody's key; `harmonize` produces a diatonic `Chord[]` chosen from the melody's own notes with functional voice-leading and a closing cadence. No UI — this is the load-bearing primitive, proven in isolation exactly as `detectPitch` was in Phase 0. All pure, all unit-tested.
 
 **Tasks:**
-1. `src/dsp/key.ts` — `detectKey(phrase): Key` via Krumhansl-Schmuckler: build a 12-bin pitch-class histogram weighted by each note's duration (beats), correlate against the 24 rotated major/minor key profiles, return the best fit.
-   Acceptance: `pnpm test src/dsp/key.test.ts` → a C-major melody (C D E F G A B) → `{ tonic: 'C', mode: 'major' }`; an A-minor melody → `{ tonic: 'A', mode: 'minor' }`; a single-note phrase → a sane key with that note diatonic.
-2. `src/dsp/harmony.ts` — `harmonize(phrase, key, opts?): Chord[]`: slice the phrase into harmonic-rhythm slots (default one chord per measure, with a per-beat fallback for sparse/long notes); for each slot pick the diatonic triad scoring highest on melody-tone coverage, biased toward functional motion (I/IV/V anchors, vi/ii pre-dominants) and forced to a cadence (V→I or IV→I) on the final slot.
+1. `src/dsp/key.ts` — `detectKey(phrase): Key` via Krumhansl-Schmuckler: build a 12-bin pitch-class histogram weighted by each note's duration (beats), with triple weight on the opening note, correlate against the 24 rotated major/minor key profiles, return the best fit.
+   Acceptance: `pnpm test src/dsp/key.test.ts` → a C-major melody (C D E F G A B) → `{ tonic: 'C', accidental: null, mode: 'major' }`; an A-minor melody → `{ tonic: 'A', accidental: null, mode: 'minor' }`; a single-note phrase → a sane key with that note diatonic.
+2. `src/dsp/harmony.ts` — `harmonize(phrase, key, opts?): Chord[]`: slice the phrase into harmonic-rhythm slots (one chord per measure for phrases spanning at least two measures, otherwise per-beat); for each slot pick the diatonic triad scoring highest on melody-tone coverage, biased toward functional motion (I/IV/V anchors, vi/ii pre-dominants), with final tonic and a penultimate V/IV when at least two slots exist.
    Acceptance: `pnpm test src/dsp/harmony.test.ts` → fixture melody in C → first chord contains the tonic when the melody opens on a chord tone; final two chords form an authentic/plagal cadence; every chord is diatonic to the detected key.
 3. Chord-symbol formatting in `harmony.ts` — `chordSymbol(chord, key): string` (e.g. `C`, `Dm`, `G`, `Am`); minor-mode and quality suffixes correct.
-   Acceptance: I in C → `C`; vi in C → `Am`; V in A-minor → `E` (or `Em` per mode handling, documented).
+   Acceptance: I in C → `C`; vi in C → `Am`; diatonic v in A-minor → `Em`.
 
 **Verification checklist:**
 - [ ] `pnpm test src/dsp/key.test.ts src/dsp/harmony.test.ts` → all pass
 - [ ] Detected key is stable across octave shifts of the same melody
 - [ ] Every emitted chord is diatonic to the detected key (no accidental leaks)
-- [ ] Final cadence present on every non-empty phrase; empty phrase → `[]`
+- [ ] Final tonic present on every non-empty phrase; two-slot cadence when at least two slots exist; empty phrase → `[]`
 - [ ] `pnpm build` → no TypeScript errors
 
 **Risks:**
@@ -391,7 +398,7 @@ Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the h
 **Objective:** Make the harmony heard and labelled. Extend playback to voice the chords under the melody; print chord symbols above the staff. After this phase: hum → hear melody **and** accompaniment → see the chord changes. The musical engine is validated before any second-staff engraving.
 
 **Tasks:**
-1. Extend `usePlayback` (and the pure `dsp/playback.ts` schedule) to also schedule accompaniment voices per `Chord` — block triad + bass root — on the **same** `AudioContext.currentTime` base as the melody (no drift), at lower gain and a softer timbre (e.g. `triangle`) so the melody stays foreground. Clean combined stop.
+1. Extend `usePlayback` (and the pure `src/dsp/playback.ts` schedule) to also schedule accompaniment voices per `Chord` — block triad + bass root — on the **same** `AudioContext.currentTime` base as the melody (no drift), at lower gain and a softer timbre (e.g. `triangle`) so the melody stays foreground. Clean combined stop.
    Acceptance: `pnpm test src/dsp/playback.test.ts` → schedule includes accompaniment entries at each chord's `beatPosition` with correct chord-tone frequencies and durations; melody + accompaniment share one time base.
 2. Chord-symbol layer in the notation — render `Chord.symbol` strings above the staff at each chord's x-position (reuse `notePosition`/beat-to-x mapping). New `SVGElementSpec` text elements, class `chord-symbol`.
    Acceptance: `pnpm test src/notation/render.test.ts` → harmonized fixture → one chord-symbol spec per chord at the expected x; symbols absent when no harmony supplied (v1 render unchanged).
@@ -419,7 +426,7 @@ Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the h
 
 **Tasks:**
 1. `src/notation/clef.ts` — add `bassClef(geom)`: a drawn bass (F) clef path (the two dots straddling the F3 line), same hand-scored stroke treatment as the treble.
-   Acceptance: `pnpm test src/notation/clef.test.ts` → returns a single path spec, finite coordinates, scales with line spacing.
+   Acceptance: `pnpm test src/notation/clef.test.ts` → returns an array containing one curl path + two dot ellipses, finite coordinates, scales with line spacing.
 2. Grand-staff geometry — extend `staffGeometry`/layout to a two-staff system (treble + bass, standard gap) with a left brace spanning both; bass-staff y-mapping (`notePositionBass`) for F-clef.
    Acceptance: `pnpm test src/notation/layout.test.ts` → bass-clef reference pitches land on correct lines (F3 = 4th line up, middle C = ledger above bass staff).
 3. Accompaniment engraving in `render.ts` — for each `Chord`, draw a bass-clef bass note (root) and the triad as stacked noteheads, vertically aligned to the chord's beat x-position; stems per voice convention.
@@ -437,7 +444,7 @@ Both `Key` and `Chord[]` are pure derivations of an immutable `Phrase` — the h
 
 **Risks:**
 - Vertical alignment drift between staves: derive both staves' x from one shared beat-to-x function — single source of truth.
-- Viewport height growth: recompute `VIEW_H` for the two-staff system; keep `NOTATION_GEOM` the shared source for canvas + export.
+- Viewport height growth: use `notationHeight()` for the two-staff system; keep `NOTATION_GEOM` the shared source for canvas + export.
 - Bass clef path complexity: same fallback discipline as the treble clef — author, render, screenshot, tune.
 
 **Phase-end review:** Run `/code-review` (high), inline. Address critical findings before marking the phase complete.
@@ -462,7 +469,7 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
 | Editing model | The SVG renderer stays a **pure one-way function** (`Phrase → SVG`); the interaction layer maps clicks → note index → a **new immutable Phrase** | Keeps the renderer pure and testable; editing is a React-layer concern, never a renderer mutation. |
 | Sequencing | **Lowest-risk-first:** chromatic harmony → accompaniment styles → measures → persistence → MIDI → editing | Editing (highest surface) lands last, on a stable measure model + persistence to save into. |
 
-**Unchanged hard constraints (still in force):** client-side only, zero network requests, no backend, no notation library, no WASM. Persistence and sharing are entirely client-side (IndexedDB + URL hash + local files).
+**Unchanged hard constraints (still in force):** client-side only, zero network requests beyond app assets, no backend, no notation library, no WASM. Persistence and sharing are entirely client-side (IndexedDB + URL hash + local files).
 
 ---
 
@@ -475,7 +482,7 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
    Acceptance: a melody implying F♯ over a G-targeting slot → V/V (D major) is offered; with `chromatic` off, output is identical to v2 (regression).
 2. `src/dsp/harmony.ts` — **borrowed chords** from the parallel mode (♭VII, iv, ♭VI in major) scored by melody-tone coverage; only surfaced when a melody note implies the borrowed chromatic tone.
    Acceptance: a melody with ♭7̂ over a tonic-area slot → ♭VII offered; never forced when the melody is purely diatonic.
-3. Symbol + voicing — `chordSymbol` labels the new chords (roman `V/V`, symbol `D`; `♭VII` → `B♭`); `voiceChord` already handles arbitrary tones and the Phase 6 bass-staff engraving already renders accidentals.
+3. Symbol + voicing — `chordSymbol` labels the new chords (roman `V/V`, symbol `D`; `♭VII` → `Bb`); `voiceChord` already handles arbitrary tones and the Phase 6 bass-staff engraving already renders accidentals.
    Acceptance: secondary-dominant + borrowed chords engrave with correct accidentals on the grand staff; symbols read correctly.
 
 **Verification checklist:**
@@ -527,7 +534,7 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
    Acceptance: a 2-measure 4/4 phrase → one internal boundary at beat 4.
 2. `src/notation/clef.ts` (or a new glyph module) — `timeSignature(geom, num, den): SVGElementSpec[]` — two stacked hand-scored digits placed after the clef.
    Acceptance: 4/4 → two "4" glyphs vertically centred on the staff; scales with line spacing.
-3. `src/notation/render.ts` — draw barlines at each boundary (full-height on the grand staff: treble top → bass bottom), a final thin+thick barline at phrase end, and the time signature once after the clef.
+3. `src/notation/render.ts` — draw barlines at each boundary (full-height on the grand staff: treble top → bass bottom), a final thin+thick barline at phrase end, and the time signature after each staff's clef.
    Acceptance: internal + final barlines present; grand-staff barlines span both staves; notes shift right to clear the time sig.
 4. Reserve horizontal space — extend the shared left-margin in `beatToX` (new `TIME_SIG_GAP`) so notes/chords on **both** staves stay aligned after the time sig is inserted.
    Acceptance: treble and bass beat columns remain vertically aligned with the time sig present.
@@ -550,17 +557,17 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
 **Objective:** Never lose your work; share a composition as a link — entirely client-side. An IndexedDB library of named compositions, JSON file import/export, and a shareable URL with the score serialized in the hash. No backend, zero network.
 
 **Tasks:**
-1. `src/storage/library.ts` (new) — IndexedDB wrapper: save / load / list / rename / delete named compositions (`Phrase` + detected `Key` + harmonization opts). Async, unit-tested with `fake-indexeddb`.
+1. `src/storage/indexedDbStore.ts` — IndexedDB wrapper: save / update / load / list / rename / remove named compositions (`Phrase` + detected `Key`). Async; IndexedDB CRUD/reload is checked in `scripts/prove-browser.py`, with unit tests for error classification and the in-memory fallback.
    Acceptance: save → list → load returns an identical record; delete removes it; survives reload.
-2. Serialization — `encodePhrase(phrase): string` / `decodePhrase(s): Phrase`, compact + URL-safe (packed + base64); round-trip tested. JSON file export/import reuses it.
-   Acceptance: encode→decode round-trips any Phrase exactly; malformed input → typed error, never a silent partial.
-3. Shareable URL — write the encoded phrase to `location.hash`; on cold load with a hash phrase, restore and render it (no mic needed).
-   Acceptance: a share URL opened cold renders the same score; **assert zero network requests** on restore.
+2. Serialization — `encodeComposition(composition): string` / `decodeComposition(s): Composition` in `src/storage/codec.ts`, compact + URL-safe (packed + base64url); round-trip tested. JSON file export/import reuses it.
+   Acceptance: encode→decode round-trips codec-supported compositions (tempo in hundredths, octaves 0–9, beat positions on a 1/16-beat grid); malformed input → typed error, never a silent partial.
+3. Shareable URL — `buildShareLink` in `src/storage/share.ts` returns a `ShareLink` object `{ url, withinLengthLimit, length }`; callers use `.url` and must check `withinLengthLimit` before sharing. The URL carries the encoded composition in its hash; on cold load with a hash composition, restore and render it (no mic needed).
+   Acceptance: a share URL opened cold renders the same score; **assert zero network requests beyond loading the app's own assets** on restore.
 4. UI — library panel (save current / load / rename / delete), "Copy share link", "Import / Export file".
 
 **Verification checklist:**
-- [ ] `pnpm test` → all pass (storage + serialization round-trips, fake-indexeddb)
-- [ ] Zero network requests on save, load, or share-restore (the local-only invariant holds)
+- [ ] `pnpm test` → all pass (codec/file/share round-trips, in-memory store contract, IndexedDB error classification); `scripts/prove-browser.py` checks real IndexedDB
+- [ ] Zero network requests on save/load, or beyond app assets on cold share-restore (the local-only invariant holds)
 - [ ] Graceful fallback when IndexedDB is unavailable (private mode) → in-memory + file export
 - [ ] `pnpm build` → clean
 
@@ -574,17 +581,17 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
 
 ## Phase 11: MIDI Input (Web MIDI API)
 
-**Objective:** A second input modality — play a MIDI keyboard instead of (or alongside) humming — feeding the **same** quantized `Phrase` the mic path produces, so the entire downstream pipeline is reused unchanged.
+**Objective:** A second input modality — play a MIDI keyboard instead of humming — feeding the **same** quantized `Phrase` the mic path produces, so the entire downstream pipeline is reused unchanged.
 
 **Tasks:**
-1. `src/dsp/midi.ts` (new) — Web MIDI capture: subscribe to note-on/note-off, build raw `(pitch, startTime, endTime)` events, convert to the same `NoteEvent` stream the pitch detector emits, then through the existing quantizer.
+1. `src/dsp/midi.ts` — parse/reduce note-on/note-off messages into the same frequency/onset/duration `RawPhrase` as mic capture, then through the existing quantizer. `src/hooks/useMidiCapture.ts` owns Web MIDI subscription and device lifecycle.
    Acceptance: a recorded note sequence → the same `Phrase` shape as the mic path → harmonizes + engraves identically.
 2. UI — input-source toggle (mic / MIDI), device picker when multiple are present, permission + no-device fallbacks.
-   Acceptance: no device or unsupported browser → clear empty state; mic path still fully works.
-3. Reuse — `quantize`, `detectKey`, `harmonize`, render all unchanged; MIDI only replaces the front of the pipeline.
+   Acceptance: no device → clear error prompt; unsupported browser → picker hidden; mic path remains available.
+3. Reuse — `quantizePhrase`, `detectKey`, `harmonize`, render all unchanged; MIDI only replaces the front of the pipeline.
 
 **Verification checklist:**
-- [ ] `pnpm test` → all pass (MIDI event → NoteEvent conversion + quantizer reuse)
+- [ ] `pnpm test` → all pass (MIDI event → RawPhrase conversion + quantizer reuse)
 - [ ] Feature-detected: toggle hidden when Web MIDI is unavailable; mic unaffected
 - [ ] `pnpm build` → clean
 
@@ -603,9 +610,9 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
 **Tasks:**
 1. Addressable model — map each rendered notehead back to its `NoteEvent` index (the reveal index already carries this; add an explicit data attribute the React layer can hit-test).
    Acceptance: clicking a notehead resolves to the correct melody-note index.
-2. Edit interactions — select a note; arrow keys / drag to transpose by diatonic step; change note value; delete; insert at a beat. Every edit produces a **new immutable `Phrase`** (the renderer never mutates).
-   Acceptance: drag a notehead up one step → pitch +1 diatonic, re-rendered; keyboard-only editing works (a11y).
-3. Live re-derive — on edit, re-run `detectKey` / `harmonize` / render (debounced) so the accompaniment + grand staff track the change.
+2. Edit interactions — select a note by click or previous/next controls; arrow keys / toolbar buttons to transpose by diatonic step; change note value; delete; duplicate after the selected note; move a note in time. Every edit produces a **new immutable `Phrase`** (the renderer never mutates).
+   Acceptance: move a selected note up one step → pitch +1 diatonic, re-rendered; keyboard-only editing works (a11y).
+3. Live re-derive — on edit, re-run `detectKey` / `harmonize` / render synchronously so the accompaniment + grand staff track the change.
    Acceptance: editing a melody note updates the engraved harmony beneath it.
 4. Undo / redo — a `Phrase` history stack.
    Acceptance: undo restores the prior Phrase exactly; redo re-applies.
@@ -619,7 +626,7 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
 
 **Risks:**
 - Highest-surface phase: the renderer is one-way (`Phrase → SVG`). Keep it pure — put hit-testing/intent in React, mapping clicks → note index → a new `Phrase`. Never make the renderer stateful.
-- Re-harmonization churn on every keystroke: debounce; consider re-harmonizing only the affected slot.
+- Re-harmonization churn on every keystroke: currently a synchronous pure pass; `App.tsx` memoizes by composition.
 
 **Phase-end review:** Run `/code-review` (high), inline.
 
