@@ -11,7 +11,7 @@ The confidence-aware rehearsal upgrade adds a current-tab baseline → target co
 - Procedural SVG — pure-TS notation renderer (staff, clefs, noteheads, stems, beams, barlines, time signatures)
 - IndexedDB — composition library, with an in-memory fallback when storage is blocked
 - Vitest — unit tests (pitch math, quantization, SVG layout, codec, storage)
-- Playwright (Python) — `scripts/prove-browser.py` drives real Chromium for what jsdom cannot cover: real IndexedDB, the zero-network invariant on the production build, and Web MIDI feature detection
+- Playwright (Python) — `scripts/prove-browser.py` drives real Chromium for what jsdom cannot cover: real IndexedDB, zero off-origin requests on the production build, and Web MIDI feature detection
 
 ## Development Conventions
 - Strict TypeScript: no `any`, `unknown` + narrowing preferred; string-literal unions over enums.
@@ -20,7 +20,7 @@ The confidence-aware rehearsal upgrade adds a current-tab baseline → target co
 - Conventional commits: `feat:`, `fix:`, `chore:`. Small logical units. Feature branch always — never commit to main.
 - All DSP math (autocorrelation, quantization) lives in `src/dsp/` — pure functions, no side effects, fully unit-tested.
 - SVG renderer lives in `src/notation/` — pure functions mapping `Phrase` data → SVG element descriptions.
-- Persistence lives in `src/storage/` — every tunable in `config.ts`, a typed error hierarchy in `types.ts`, and one `CompositionStore` contract that both the IndexedDB and in-memory stores are held to via `storeContract.ts`. Add a store implementation by satisfying that contract, not by writing a parallel suite.
+- Persistence lives in `src/storage/` — every tunable in `config.ts`, a typed error hierarchy in `types.ts`, and one `CompositionStore` interface implemented by both stores. `storeContract.ts` exercises the in-memory store; `scripts/prove-browser.py` exercises IndexedDB CRUD and reload persistence in Chromium. Add a store implementation by satisfying that contract, not by writing a parallel suite.
 
 ## CC Infrastructure
 This project inherits the global CC setup: 34+ skills, agents, hooks, and MCP plugins.
@@ -81,8 +81,8 @@ Browser-based musical toy. Hum or whistle a melody into your mic — Undertone c
 
 **v3 complete.** Capture from microphone or MIDI keyboard, notation, playback, SVG export, key
 detection, diatonic and chromatic harmony, accompaniment textures, measure structure, local
-persistence with share links, and hand-editing the score are all on `main`. 408 vitest tests plus
-65 browser checks, green.
+persistence with share links, and hand-editing the score are implemented in this checkout. Vitest
+tests and the browser proof harness cover these features; rehearsal adds further Vitest coverage.
 
 See IMPLEMENTATION-ROADMAP.md for full phase details.
 
@@ -107,7 +107,7 @@ pnpm build && python3 scripts/prove-browser.py   # real-browser checks + screens
 
 ## Known Risks
 
-- Do not add a backend — client-side only, nothing leaves the browser tab. Sharing is a URL hash and local files; the zero-network invariant is asserted in the browser harness.
+- Do not add a backend — client-side only, nothing leaves the browser tab. Sharing is a URL hash and local files; zero off-origin requests on share restore are asserted in the browser harness.
 - Do not introduce a notation library (VexFlow, Lilypond, etc.) — the hand-scored SVG renderer is the product.
 - Do not add features beyond the roadmap; v3 is complete and further scope is an operator decision.
 
