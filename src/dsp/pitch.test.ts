@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+	HUMMING_SAMPLE_RATE,
+	makeHummingFrame,
+} from "../../tests/fixtures/humming";
 import { silence } from "../../tests/fixtures/silence";
 import {
 	FRAME_SIZE,
@@ -43,5 +47,41 @@ describe("detectPitch", () => {
 		expect(r.frequency).toBeGreaterThan(435);
 		expect(r.frequency).toBeLessThan(445);
 		expect(r.rms).toBeGreaterThan(RMS_SILENCE_FLOOR);
+	});
+
+	it("tracks a project-owned humming-like A4 across vibrato and breath noise", () => {
+		const results = Array.from({ length: 12 }, (_, index) =>
+			detectPitch(
+				makeHummingFrame({
+					frequency: 440,
+					startSeconds: index * 0.04,
+					seed: 0x440000 + index,
+				}),
+				HUMMING_SAMPLE_RATE,
+			),
+		);
+		const frequencies = results.map((result) => result.frequency);
+		const confident = results.filter((result) => result.confidence >= 0.9);
+
+		expect(Math.min(...frequencies)).toBeGreaterThan(430);
+		expect(Math.max(...frequencies)).toBeLessThan(450);
+		expect(confident.length).toBeGreaterThanOrEqual(10);
+	});
+
+	it("keeps a breathier humming-like frame in a bounded uncertainty range", () => {
+		const result = detectPitch(
+			makeHummingFrame({
+				frequency: 329.63,
+				breathNoise: 0.07,
+				vibratoCents: 24,
+				glideCents: 18,
+			}),
+			HUMMING_SAMPLE_RATE,
+		);
+
+		expect(result.frequency).toBeGreaterThan(315);
+		expect(result.frequency).toBeLessThan(345);
+		expect(result.confidence).toBeGreaterThan(0.75);
+		expect(result.confidence).toBeLessThanOrEqual(1);
 	});
 });

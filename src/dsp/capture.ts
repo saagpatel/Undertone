@@ -1,4 +1,10 @@
-import { CONFIDENCE_GATE, type PitchResult, RMS_SILENCE_FLOOR } from "./pitch";
+import {
+	CONFIDENCE_GATE,
+	MAX_FREQUENCY_HZ,
+	MIN_FREQUENCY_HZ,
+	type PitchResult,
+	RMS_SILENCE_FLOOR,
+} from "./pitch";
 
 /**
  * Note-onset/offset segmentation over a stream of {@link PitchResult} frames.
@@ -19,6 +25,37 @@ export interface RawNote {
 }
 
 export type RawPhrase = RawNote[];
+
+export type CaptureQualityIssue =
+	| "insufficient-audio"
+	| "mostly-unvoiced"
+	| "background-noise"
+	| "low-confidence"
+	| "clipping"
+	| "out-of-range";
+
+/** Session-only evidence retained after the raw frame buffer is released. */
+export interface CaptureQualitySummary {
+	totalFrames: number;
+	voicedFrames: number;
+	unvoicedFrames: number;
+	noiseFrames: number;
+	lowConfidenceFrames: number;
+	clippedFrames: number;
+	outOfRangeFrames: number;
+	medianConfidence: number | null;
+	medianFrameIntervalMs: number | null;
+	frameIntervalJitterMs: number | null;
+	/** Conservative capture-window uncertainty for a detected onset. */
+	onsetUncertaintyMs: number | null;
+	durationMs: number;
+	issues: CaptureQualityIssue[];
+}
+
+export interface CaptureEvidence {
+	rawPhrase: RawPhrase;
+	quality: CaptureQualitySummary;
+}
 
 /** Consecutive voiced frames required to open a note (debounces blips). */
 export const ONSET_FRAMES = 3;
@@ -50,6 +87,115 @@ function median(values: readonly number[]): number {
 		: sorted[mid];
 }
 
+function medianOrNull(values: readonly number[]): number | null {
+	return values.length === 0 ? null : median(values);
+}
+
+function medianAbsoluteDeviation(
+	values: readonly number[],
+	center: number | null,
+): number | null {
+	return center === null
+		? null
+		: median(values.map((value) => Math.abs(value - center)));
+}
+
+/**
+ * Compress the frame buffer into deterministic, non-audio quality evidence.
+ * The summary stays in memory for the rehearsal session only; samples and
+ * per-frame readings are discarded when capture finishes.
+ */
+export function summarizeCaptureFrames(
+	frames: readonly PitchResult[],
+	rawNoteCount: number,
+): CaptureQualitySummary {
+	let voicedFrames = 0;
+	let unvoicedFrames = 0;
+	let noiseFrames = 0;
+	let lowConfidenceFrames = 0;
+	let clippedFrames = 0;
+	let outOfRangeFrames = 0;
+	const voicedConfidences: number[] = [];
+
+	for (const frame of frames) {
+		if (frame.peak >= 0.98) clippedFrames++;
+		if (frame.rms < RMS_SILENCE_FLOOR) {
+			unvoicedFrames++;
+			continue;
+		}
+		if (frame.frequency <= 0) {
+			noiseFrames++;
+			continue;
+		}
+		if (
+			frame.frequency < MIN_FREQUENCY_HZ ||
+			frame.frequency > MAX_FREQUENCY_HZ
+		) {
+			outOfRangeFrames++;
+			continue;
+		}
+		if (frame.confidence < CONFIDENCE_GATE) {
+			lowConfidenceFrames++;
+			continue;
+		}
+		voicedFrames++;
+		voicedConfidences.push(frame.confidence);
+	}
+
+	const intervals = frames
+		.slice(1)
+		.map((frame, index) => frame.timestamp - frames[index].timestamp)
+		.filter((interval) => interval >= 0 && Number.isFinite(interval));
+	const medianFrameIntervalMs = medianOrNull(intervals);
+	const frameIntervalJitterMs = medianAbsoluteDeviation(
+		intervals,
+		medianFrameIntervalMs,
+	);
+	const onsetUncertaintyMs =
+		medianFrameIntervalMs === null
+			? null
+			: ONSET_FRAMES * medianFrameIntervalMs + (frameIntervalJitterMs ?? 0);
+	const durationMs =
+		frames.length < 2
+			? 0
+			: Math.max(0, frames[frames.length - 1].timestamp - frames[0].timestamp);
+	const issues: CaptureQualityIssue[] = [];
+	if (rawNoteCount === 0 || voicedFrames < ONSET_FRAMES)
+		issues.push("insufficient-audio");
+	if (frames.length > 0 && unvoicedFrames / frames.length >= 0.6)
+		issues.push("mostly-unvoiced");
+	if (noiseFrames > 0) issues.push("background-noise");
+	if (lowConfidenceFrames > 0) issues.push("low-confidence");
+	if (clippedFrames > 0) issues.push("clipping");
+	if (outOfRangeFrames > 0) issues.push("out-of-range");
+
+	return {
+		totalFrames: frames.length,
+		voicedFrames,
+		unvoicedFrames,
+		noiseFrames,
+		lowConfidenceFrames,
+		clippedFrames,
+		outOfRangeFrames,
+		medianConfidence: medianOrNull(voicedConfidences),
+		medianFrameIntervalMs,
+		frameIntervalJitterMs,
+		onsetUncertaintyMs,
+		durationMs,
+		issues,
+	};
+}
+
+export function captureEvidenceFromFrames(
+	frames: readonly PitchResult[],
+): CaptureEvidence {
+	const rawPhrase = reduceFramesToPhrase(frames);
+	return {
+		rawPhrase,
+		quality: summarizeCaptureFrames(frames, rawPhrase.length),
+	};
+}
+
 /**
  * Pure core: fold a frame stream into a {@link RawPhrase}. Single forward pass,
  * no side effects — the unit of truth the tests and {@link CaptureSession} share.
@@ -62,7 +208,6 @@ export function reduceFramesToPhrase(
 	let voicedRun: PitchResult[] = [];
 	let inNote = false;
 	let onsetMs = 0;
-	let refFreq = 0;
 	let noteFreqs: number[] = [];
 	let lastVoicedMs = 0;
 	let belowRun = 0;
@@ -84,7 +229,6 @@ export function reduceFramesToPhrase(
 		inNote = true;
 		onsetMs = run[0].timestamp;
 		noteFreqs = run.map((f) => f.frequency);
-		refFreq = median(noteFreqs);
 		lastVoicedMs = run[run.length - 1].timestamp;
 		belowRun = 0;
 		voicedRun = [];
@@ -105,10 +249,13 @@ export function reduceFramesToPhrase(
 
 		if (voiced) {
 			if (
-				Math.abs(centsBetween(frame.frequency, refFreq)) > MAX_NOTE_SHIFT_CENTS
+				Math.abs(
+					centsBetween(frame.frequency, noteFreqs[noteFreqs.length - 1]),
+				) > MAX_NOTE_SHIFT_CENTS
 			) {
-				// Pitch jumped without an intervening silence — close this note and
-				// start tracking the next one from this frame.
+				// An abrupt frame-to-frame jump without silence starts a new note.
+				// Comparing with the previous voiced frame keeps a gradual portamento
+				// inside one uncertain note instead of inventing repeated onsets.
 				endNote();
 				voicedRun = [frame];
 			} else {
@@ -148,8 +295,16 @@ export class CaptureSession {
 	}
 
 	finish(): RawPhrase {
+		return this.finishEvidence().rawPhrase;
+	}
+
+	finishEvidence(): CaptureEvidence {
 		this.ended = true;
-		return reduceFramesToPhrase(this.frames);
+		const evidence = captureEvidenceFromFrames(this.frames);
+		// The rehearsal model retains only note timing/frequency plus aggregate
+		// quality. Release frame-by-frame readings immediately after summarizing.
+		this.frames = [];
+		return evidence;
 	}
 
 	get isCapturing(): boolean {

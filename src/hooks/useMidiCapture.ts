@@ -136,6 +136,7 @@ export function useMidiCapture(): MidiCapture {
 					// MIDI reports exactly what was played; there is nothing to doubt.
 					confidence: 1,
 					rms: message.velocity / 127,
+					peak: message.velocity / 127,
 					timestamp: message.timeMs,
 				});
 				return;

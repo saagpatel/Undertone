@@ -5,6 +5,7 @@ import type { InputSource } from "./components/InputSourcePicker";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { NOTATION_GEOM, NotationCanvas } from "./components/NotationCanvas";
 import { PitchMeter } from "./components/PitchMeter";
+import { RehearsalPanel } from "./components/RehearsalPanel";
 import type { AccompanimentStyle } from "./dsp/accompaniment";
 import { harmonize } from "./dsp/harmony";
 import { useActiveComposition } from "./hooks/useActiveComposition";
@@ -13,6 +14,7 @@ import { useCompositionLibrary } from "./hooks/useCompositionLibrary";
 import { useLatestCapture } from "./hooks/useLatestCapture";
 import { useMidiCapture } from "./hooks/useMidiCapture";
 import { usePlayback } from "./hooks/usePlayback";
+import { useRehearsal } from "./hooks/useRehearsal";
 import { useScoreEditor } from "./hooks/useScoreEditor";
 import { ScoreEditorControls } from "./components/ScoreEditorControls";
 import {
@@ -58,6 +60,10 @@ export default function App() {
 	// Whichever modality performed most recently owns the score on screen, so
 	// switching inputs to reach the device picker never blanks a finished take.
 	const latest = useLatestCapture([mic, midi]);
+	// Rehearsal evidence intentionally follows microphone takes only. MIDI is an
+	// exact event source, not an uncertain transcription of a hum.
+	const latestMicTake = latest.phrase === mic.phrase ? mic.take : null;
+	const rehearsal = useRehearsal(mic.take);
 	const active = useActiveComposition(latest.phrase, latest.captureId);
 	// Editing layers on top of the active composition and never writes back, so
 	// the data flow stays one-way and the renderer stays pure.
@@ -125,6 +131,7 @@ export default function App() {
 	);
 	const [style, setStyle] = useState<AccompanimentStyle>("block");
 	const playback = usePlayback(composition?.phrase ?? null, chords, style);
+	const targetPlayback = usePlayback(rehearsal.baseline?.phrase ?? null);
 	const status = isCapturing ? "recording" : composition ? "done" : "idle";
 
 	const { load } = active;
@@ -406,7 +413,9 @@ export default function App() {
 		<main className="app">
 			<header className="app__header">
 				<h1 className="app__title">Undertone</h1>
-				<p className="app__tagline">Hum a melody — watch it reveal itself.</p>
+				<p className="app__tagline">
+					Hum a melody — reveal it, then rehearse the contour.
+				</p>
 			</header>
 
 			{/* Focusable so the whole score is keyboard-editable. The shortcuts live
@@ -425,7 +434,7 @@ export default function App() {
 				onKeyDown={isCapturing ? undefined : handleScoreKeyDown}
 			>
 				{isCapturing ? (
-					<PitchMeter pitch={pitch} />
+					<PitchMeter pitch={pitch} isListening />
 				) : composition ? (
 					hasNotes ? (
 						<NotationCanvas
@@ -536,9 +545,22 @@ export default function App() {
 						{notice}
 					</p>
 				) : (
-					<p className="app__hint">hum → reveal → save → share</p>
+					<p className="app__hint">hum → reveal → rehearse → save</p>
 				)}
 			</div>
+
+			<RehearsalPanel
+				currentTake={latestMicTake}
+				baseline={rehearsal.baseline}
+				repeat={rehearsal.repeat}
+				comparison={rehearsal.comparison}
+				targetPlaying={targetPlayback.isPlaying}
+				targetProgress={targetPlayback.progress}
+				onStart={rehearsal.startFromCurrent}
+				onReset={rehearsal.reset}
+				onPlayTarget={targetPlayback.play}
+				onStopTarget={targetPlayback.stop}
+			/>
 
 			<LibraryPanel
 				records={library.records}

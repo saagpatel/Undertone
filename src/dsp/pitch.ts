@@ -17,6 +17,8 @@ export interface PitchResult {
 	confidence: number;
 	/** Root-mean-square amplitude of the frame. Gate silence at < 0.01. */
 	rms: number;
+	/** Largest absolute sample, 0..1. Values near 1 can indicate clipping. */
+	peak: number;
 	/** Capture time of the reading (performance.now()). */
 	timestamp: number;
 }
@@ -34,8 +36,14 @@ export const MAX_FREQUENCY_HZ = 1047; // ~C6
 /** A peak counts as the fundamental once it reaches this fraction of the best. */
 const PEAK_ACCEPT_RATIO = 0.9;
 
-function silenceResult(rms: number): PitchResult {
-	return { frequency: 0, confidence: 0, rms, timestamp: performance.now() };
+function silenceResult(rms: number, peak: number): PitchResult {
+	return {
+		frequency: 0,
+		confidence: 0,
+		rms,
+		peak,
+		timestamp: performance.now(),
+	};
 }
 
 export function detectPitch(
@@ -46,15 +54,17 @@ export function detectPitch(
 
 	// Prefix sums of squares give O(1) windowed energy per lag and the frame RMS.
 	const prefixSq = new Float64Array(n + 1);
+	let peak = 0;
 	for (let i = 0; i < n; i++) {
 		prefixSq[i + 1] = prefixSq[i] + buffer[i] * buffer[i];
+		peak = Math.max(peak, Math.abs(buffer[i]));
 	}
 	const rms = Math.sqrt(prefixSq[n] / n);
-	if (rms < RMS_SILENCE_FLOOR) return silenceResult(rms);
+	if (rms < RMS_SILENCE_FLOOR) return silenceResult(rms, peak);
 
 	const minLag = Math.max(2, Math.floor(sampleRate / MAX_FREQUENCY_HZ));
 	const maxLag = Math.min(n - 1, Math.ceil(sampleRate / MIN_FREQUENCY_HZ));
-	if (maxLag <= minLag) return silenceResult(rms);
+	if (maxLag <= minLag) return silenceResult(rms, peak);
 
 	// Normalized autocorrelation (Pearson-style correlation coefficient) per lag.
 	// For a clean periodic signal this is ~1.0 at integer multiples of the period.
@@ -74,7 +84,7 @@ export function detectPitch(
 		if (c > bestCorr) bestCorr = c;
 	}
 
-	if (bestCorr <= 0) return silenceResult(rms);
+	if (bestCorr <= 0) return silenceResult(rms, peak);
 
 	// Choose the *first* (shortest-lag) peak clearing the accept level. Lower
 	// octaves of the true pitch correlate just as strongly at 2×, 3× the period,
@@ -117,5 +127,5 @@ export function detectPitch(
 
 	const frequency = sampleRate / refinedLag;
 	const confidence = Math.min(1, Math.max(0, corr[chosenLag]));
-	return { frequency, confidence, rms, timestamp: performance.now() };
+	return { frequency, confidence, rms, peak, timestamp: performance.now() };
 }

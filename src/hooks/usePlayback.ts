@@ -12,6 +12,8 @@ import type { Phrase } from "../dsp/quantize";
 export interface Playback {
 	/** True from the first scheduled note until the last one finishes (or stop). */
 	isPlaying: boolean;
+	/** Normalized 0..1 playhead while scheduled audio is active. */
+	progress: number | null;
 	/** Play the phrase. MUST be called from a user gesture (AudioContext policy). */
 	play: () => void;
 	/** Stop immediately with a short fade — no click, no lingering sound. */
@@ -102,7 +104,9 @@ export function usePlayback(
 	const contextRef = useRef<AudioContext | null>(null);
 	const voicesRef = useRef<Voice[]>([]);
 	const endTimerRef = useRef<number | null>(null);
+	const progressRafRef = useRef<number | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
+	const [progress, setProgress] = useState<number | null>(null);
 
 	const stop = useCallback(() => {
 		const ctx = contextRef.current;
@@ -124,7 +128,12 @@ export function usePlayback(
 			clearTimeout(endTimerRef.current);
 			endTimerRef.current = null;
 		}
+		if (progressRafRef.current !== null) {
+			cancelAnimationFrame(progressRafRef.current);
+			progressRafRef.current = null;
+		}
 		setIsPlaying(false);
+		setProgress(null);
 	}, []);
 
 	const play = useCallback(() => {
@@ -160,19 +169,38 @@ export function usePlayback(
 		setIsPlaying(true);
 
 		// End timer: use the MAX of melody and accompaniment durations.
+		const soundingDuration = Math.max(
+			scheduleDuration(melodySchedule),
+			scheduleDuration(accompSchedule),
+		);
 		const totalMs =
-			(LEAD_TIME +
-				Math.max(
-					scheduleDuration(melodySchedule),
-					scheduleDuration(accompSchedule),
-				)) *
+			(LEAD_TIME + soundingDuration) *
 				1000 +
 			60;
+
+		const updateProgress = () => {
+			const elapsed = Math.max(0, ctx.currentTime - base);
+			setProgress(
+				soundingDuration <= 0 ? 1 : Math.min(1, elapsed / soundingDuration),
+			);
+			if (elapsed < soundingDuration) {
+				progressRafRef.current = requestAnimationFrame(updateProgress);
+			} else {
+				progressRafRef.current = null;
+			}
+		};
+		setProgress(0);
+		progressRafRef.current = requestAnimationFrame(updateProgress);
 
 		endTimerRef.current = window.setTimeout(() => {
 			voicesRef.current = [];
 			endTimerRef.current = null;
+			if (progressRafRef.current !== null) {
+				cancelAnimationFrame(progressRafRef.current);
+				progressRafRef.current = null;
+			}
 			setIsPlaying(false);
+			setProgress(null);
 		}, totalMs);
 	}, [phrase, chords, style, stop]);
 
@@ -188,5 +216,5 @@ export function usePlayback(
 		};
 	}, [stop]);
 
-	return { isPlaying, play, stop };
+	return { isPlaying, progress, play, stop };
 }
