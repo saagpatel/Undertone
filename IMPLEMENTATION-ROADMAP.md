@@ -561,7 +561,7 @@ v2 shipped the whole-composition reveal: hum → key detection → diatonic func
    Acceptance: save → list → load returns an identical record; delete removes it; survives reload.
 2. Serialization — `encodeComposition(composition): string` / `decodeComposition(s): Composition` in `src/storage/codec.ts`, compact + URL-safe (packed + base64url); round-trip tested. JSON file export/import reuses it.
    Acceptance: encode→decode round-trips codec-supported compositions (tempo in hundredths, octaves 0–9, beat positions on a 1/16-beat grid); malformed input → typed error, never a silent partial.
-3. Shareable URL — `buildShareLink` in `src/storage/share.ts` returns a URL carrying the encoded composition in its hash; on cold load with a hash composition, restore and render it (no mic needed).
+3. Shareable URL — `buildShareLink` in `src/storage/share.ts` returns a `ShareLink` object `{ url, withinLengthLimit, length }`; callers use `.url` and must check `withinLengthLimit` before sharing. The URL carries the encoded composition in its hash; on cold load with a hash composition, restore and render it (no mic needed).
    Acceptance: a share URL opened cold renders the same score; **assert zero network requests beyond loading the app's own assets** on restore.
 4. UI — library panel (save current / load / rename / delete), "Copy share link", "Import / Export file".
 
